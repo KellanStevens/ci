@@ -1,0 +1,119 @@
+name: Preview cleanup
+
+# Delete the preview Worker and its custom domain of a pull request. Call it
+# when a pull request closes (merged or not), and by hand for a preview that
+# stayed:
+#
+#   on:
+#     pull_request_target:
+#       types: [closed]
+#     workflow_dispatch:
+#       inputs:
+#         pr_number:
+#           description: Pull request number of the preview to delete
+#           required: true
+#           type: number
+#
+# pull_request_target runs from main, not from the pull request, so it can use
+# the Cloudflare token of the "preview" environment. This workflow checks out
+# main and never runs code from the pull request.
+
+on:
+  workflow_call:
+    inputs:
+      pr-number:
+        description: >-
+          The pull request, as
+          `github.event.pull_request.number || inputs.pr_number`.
+        type: number
+        required: true
+      name:
+        description: The site, as in preview.yml. The Worker is "<name>-pr-<number>".
+        type: string
+        required: true
+      host:
+        description: The hostname of a preview, with {pr}, as in preview.yml.
+        type: string
+        required: true
+      old-hosts:
+        description: >-
+          Old hostname patterns with {pr}, separated by spaces or new lines.
+          Keep one until no open pull request has a preview on it.
+        type: string
+        default: ""
+      account-id:
+        description: >-
+          The Cloudflare account. Leave empty to find it from the zone, and to
+          let Wrangler take it from wrangler.jsonc.
+        type: string
+        default: ""
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  cleanup:
+    name: cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The Cloudflare token of the previews.
+    environment: preview
+    concurrency:
+      group: preview-cleanup-${{ inputs.pr-number }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
+      - name: Set up
+        uses: ./.ci/actions/setup
+
+      - name: Find preview
+        id: find
+        env:
+          PR_NUMBER: ${{ inputs.pr-number }}
+          NAME: ${{ inputs.name }}
+          HOSTS: ${{ inputs.host }} ${{ inputs.old-hosts }}
+        run: |
+          set -f
+          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::\"$PR_NUMBER\" is not a pull request number."
+            exit 1
+          fi
+          hosts=()
+          for pattern in $HOSTS; do
+            if [[ "$pattern" != *"{pr}"* ]]; then
+              echo "::error::\"$pattern\" has no {pr} in it."
+              exit 1
+            fi
+            hosts+=("${pattern//\{pr\}/$PR_NUMBER}")
+          done
+          {
+            echo "worker=$NAME-pr-$PR_NUMBER"
+            echo "hosts=${hosts[*]}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Delete preview
+        uses: ./.ci/actions/delete-preview
+        with:
+          worker-name: ${{ steps.find.outputs.worker }}
+          hosts: ${{ steps.find.outputs.hosts }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ inputs.account-id }}

@@ -203,3 +203,32 @@ jobs:
 A site with a Worker script sets `worker: true` here and `worker-bundle: true`
 in `check.yml`. The preview then runs the Worker code of the pull request with
 the `wrangler.jsonc` of main.
+
+### `preview-cleanup.yml`
+
+Delete the Worker and domain of a preview when its pull request closes, or by
+hand from the Actions tab.
+
+```yaml
+name: Preview cleanup
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number of the preview to delete
+        required: true
+        type: number
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    uses: KellanStevens/ci/.github/workflows/preview-cleanup.yml@<sha> # v1.0.0
+    with:
+      pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+      name: example
+      host: pr-{pr}.example.com
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
