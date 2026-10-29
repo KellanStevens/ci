@@ -168,3 +168,38 @@ deploy:
 A reusable workflow receives only the secrets that it names. To upload a new
 Worker secret, add it to `on.workflow_call.secrets` of `deploy.yml` and
 `preview.yml` first.
+
+### `preview.yml`
+
+Deploy each pull request to its own Worker, `<name>-pr-<number>`, on its own
+hostname, after CI passes, and comment the link on the pull request. Call it
+from a workflow that runs on `workflow_run` of CI, so that it runs from main
+with the secrets, and the code of the pull request never runs where the
+secrets are. See the comment at the top of the file.
+
+```yaml
+name: Preview
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  preview:
+    uses: KellanStevens/ci/.github/workflows/preview.yml@<sha> # v1.0.0
+    # A called workflow cannot have more permissions than its caller.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    with:
+      name: example
+      host: pr-{pr}.example.com
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+A site with a Worker script sets `worker: true` here and `worker-bundle: true`
+in `check.yml`. The preview then runs the Worker code of the pull request with
+the `wrangler.jsonc` of main.

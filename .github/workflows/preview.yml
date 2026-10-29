@@ -1,0 +1,368 @@
+name: Preview
+
+# Deploy each pull request to its own preview Worker, "<name>-pr-<number>", on
+# its own hostname, after CI passes. Call it from a workflow that runs on
+# workflow_run of CI:
+#
+#   on:
+#     workflow_run:
+#       workflows: [CI]
+#       types: [completed]
+#
+# CI (check.yml) runs the code of the pull request, so it builds with no
+# secrets. This workflow has the secrets. GitHub always runs a workflow_run
+# workflow from main, so a pull request cannot change it. The "preview"
+# environment gives its secrets only to workflows that run on main.
+#
+# The files from CI are untrusted: anyone who can push a branch can change
+# them. This workflow runs none of them on the runner. Wrangler reads the
+# wrangler.jsonc of main, so a pull request cannot point it at a file or a
+# command here. The Worker code runs only on Cloudflare, with the preview
+# secrets, never the production ones. So a pull request that changes
+# wrangler.jsonc previews with the config of main.
+#
+# GitHub runs the calling workflow only when it is on main.
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: >-
+          The site, for the Worker names: the preview of pull request 12 is
+          the Worker "<name>-pr-12".
+        type: string
+        required: true
+      host:
+        description: >-
+          The hostname of a preview, with {pr} for the pull request number,
+          for example pr-{pr}.example.com. Keep it one level below the zone,
+          so that the Universal SSL certificate (*.example.com) covers it at
+          once. A deeper name waits minutes for its own certificate.
+        type: string
+        required: true
+      site-path:
+        description: The directory that the build writes, and Wrangler serves.
+        type: string
+        default: dist
+      wrangler-env:
+        description: >-
+          The Wrangler environment of the previews. Give it "routes": [] in
+          wrangler.jsonc, so that --domain is the only route and a preview
+          can never take over production.
+        type: string
+        default: preview
+      worker:
+        description: >-
+          Deploy the Worker script that check.yml bundled (worker-bundle).
+          Set this for a site with a Worker script.
+        type: boolean
+        default: false
+      required-secrets:
+        description: >-
+          Worker secrets to upload, which must not be empty. See the
+          worker-secrets action. The preview Worker runs the code of the pull
+          request, and that code can read them: use preview secrets, never the
+          production ones.
+        type: string
+        default: ""
+      optional-secrets:
+        description: Worker secrets to upload if they are set.
+        type: string
+        default: ""
+      noindex:
+        description: >-
+          Keep the preview out of search engines with an X-Robots-Tag header
+          in _headers. Set this if the build allows search engines.
+        type: boolean
+        default: false
+      require-access:
+        description: >-
+          Previews must be behind Cloudflare Access. After the deploy, check
+          that a visitor with no login gets the Access login. If not, delete
+          the preview and fail.
+        type: boolean
+        default: false
+      comment-marker:
+        description: >-
+          The hidden marker of the preview comment. Empty is "<name>-preview".
+          See the preview-comment action.
+        type: string
+        default: ""
+      account-id:
+        description: >-
+          The Cloudflare account, to delete a preview. Leave empty to find it
+          from the zone, and to let Wrangler take it from wrangler.jsonc.
+        type: string
+        default: ""
+    # Each Worker secret that a site uploads must be listed here. See
+    # deploy.yml.
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      RESEND_API_KEY:
+        required: false
+      TURNSTILE_SECRET_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  # Find the open pull request that CI built. Its number comes from the GitHub
+  # API, never from the files of the run.
+  find:
+    name: find pull request
+    # Only pull request runs from this repository whose checks passed. CI
+    # builds no preview for forks and drafts.
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      number: ${{ steps.find.outputs.number }}
+      host: ${{ steps.find.outputs.host }}
+      worker: ${{ steps.find.outputs.worker }}
+    steps:
+      - name: Find pull request
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          NAME: ${{ inputs.name }}
+          HOST: ${{ inputs.host }}
+        run: |
+          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::\"$HEAD_SHA\" is not a commit SHA."
+            exit 1
+          fi
+          # Skip a draft, and skip a run of an older commit. The run of the
+          # newest commit deploys that one.
+          number=$(gh api --method GET "repos/$REPO/pulls" -f state=open -f head="$OWNER:$BRANCH" \
+            --jq "[.[] | select(.head.sha == \"$HEAD_SHA\" and (.draft | not))][0].number // empty")
+          if [ -z "$number" ]; then
+            echo "::notice::No open pull request that is ready for review is at $HEAD_SHA. Nothing to deploy."
+            echo "number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          host=${HOST//\{pr\}/$number}
+          worker="$NAME-pr-$number"
+          if ! [[ "$host" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ && "$HOST" == *"{pr}"* ]]; then
+            echo "::error::\"$HOST\" is not a hostname with {pr} in it."
+            exit 1
+          fi
+          if ! [[ "$worker" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+            echo "::error::\"$NAME\" is not a Worker name."
+            exit 1
+          fi
+          {
+            echo "number=$number"
+            echo "host=$host"
+            echo "worker=$worker"
+          } >> "$GITHUB_OUTPUT"
+
+  preview:
+    name: preview
+    needs: find
+    if: ${{ needs.find.outputs.number != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Download the files that CI built.
+      actions: read
+      # Comment on the pull request.
+      pull-requests: write
+    environment:
+      name: preview
+      url: https://${{ needs.find.outputs.host }}
+    # One deploy at a time for each branch. A newer run waits, and never stops
+    # a deploy that has started.
+    concurrency:
+      group: preview-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    env:
+      PR_NUMBER: ${{ needs.find.outputs.number }}
+      PREVIEW_HOST: ${{ needs.find.outputs.host }}
+      WORKER_NAME: ${{ needs.find.outputs.worker }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # main, not the pull request. Wrangler, wrangler.jsonc and the actions
+      # all come from here.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
+      - name: Set up
+        uses: ./.ci/actions/setup
+
+      # Outside the checkout, so that no file of the run lands on a path that
+      # this job runs or reads, for example .env.
+      - name: Download site
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Download Worker
+        if: ${{ inputs.worker }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: worker
+          path: ${{ runner.temp }}/worker
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # Keep only regular files and directories, so that no link points
+      # Wrangler at a file of this runner. Drop hidden files except
+      # .well-known/ and .assetsignore, then copy the site into the checkout.
+      - name: Check site
+        env:
+          SRC: ${{ runner.temp }}/site
+          WORKER_SRC: ${{ runner.temp }}/worker
+          SITE_PATH: ${{ inputs.site-path }}
+          WORKER: ${{ inputs.worker }}
+        run: |
+          if [ -z "$(ls -A "$SRC")" ]; then
+            echo "::error::The site is empty."
+            exit 1
+          fi
+          find "$SRC" -mindepth 1 ! -type f ! -type d -delete
+          find "$SRC" -mindepth 1 -name '.*' \
+            ! -path "$SRC/.well-known" ! -path "$SRC/.assetsignore" -prune -exec rm -rf {} +
+          rm -rf "$SITE_PATH"
+          cp -R "$SRC" "$SITE_PATH"
+
+          # Wrangler uploads the bundle as it is, with --no-bundle. Keep only
+          # JavaScript and source maps.
+          if [ "$WORKER" = true ]; then
+            if [ ! -f "$WORKER_SRC/index.js" ]; then
+              echo "::error::The Worker bundle has no index.js."
+              exit 1
+            fi
+            find "$WORKER_SRC" -mindepth 1 \( ! -type f ! -type d \) -delete
+            find "$WORKER_SRC" -type f ! -name '*.js' ! -name '*.mjs' ! -name '*.map' -print -delete
+          fi
+
+      # The build is shared with production, which may allow search engines.
+      # Previews are public, so add the noindex rule to this copy only.
+      - name: Keep the preview out of search engines
+        if: ${{ inputs.noindex }}
+        env:
+          SITE_PATH: ${{ inputs.site-path }}
+        run: |
+          printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> "$SITE_PATH/_headers"
+
+      - name: Write Worker secrets
+        id: secrets
+        uses: ./.ci/actions/worker-secrets
+        with:
+          required: ${{ inputs.required-secrets }}
+          optional: ${{ inputs.optional-secrets }}
+          secrets: ${{ toJSON(secrets) }}
+          vars: ${{ toJSON(vars) }}
+          help: Use the secrets of the "preview" environment. See README.md, "Secrets".
+
+      # Each push replaces the Worker, so the URL stays the same. The cleanup
+      # workflow deletes the Worker when the pull request closes.
+      - name: Deploy preview
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_ENV: ${{ inputs.wrangler-env }}
+          SECRETS_FILE: ${{ steps.secrets.outputs.file }}
+          WORKER: ${{ inputs.worker }}
+          WORKER_SRC: ${{ runner.temp }}/worker
+        run: |
+          args=()
+          if [ "$WORKER" = true ]; then
+            args+=("$WORKER_SRC/index.js" --no-bundle)
+          fi
+          args+=(
+            --env "$WRANGLER_ENV"
+            --name "$WORKER_NAME"
+            --domain "$PREVIEW_HOST"
+            --tag "$HEAD_SHA"
+            --message "PR #$PR_NUMBER @ ${HEAD_SHA::7}"
+          )
+          if [ -n "$SECRETS_FILE" ]; then
+            args+=(--secrets-file "$SECRETS_FILE")
+          fi
+          bunx wrangler deploy "${args[@]}"
+          echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
+          echo "Preview: https://$PREVIEW_HOST" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check Access
+        if: ${{ inputs.require-access }}
+        uses: ./.ci/actions/check-access
+        with:
+          host: ${{ env.PREVIEW_HOST }}
+
+      # A preview that Access does not protect must not stay up.
+      - name: Delete unprotected preview
+        if: ${{ failure() && inputs.require-access && steps.deploy.outcome == 'success' }}
+        uses: ./.ci/actions/delete-preview
+        with:
+          worker-name: ${{ env.WORKER_NAME }}
+          hosts: ${{ env.PREVIEW_HOST }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ inputs.account-id }}
+
+      - name: Comment preview link
+        uses: ./.ci/actions/preview-comment
+        with:
+          pr-number: ${{ env.PR_NUMBER }}
+          url: ${{ steps.deploy.outputs.url }}
+          sha: ${{ env.HEAD_SHA }}
+          marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
+
+      # A merge does not stop this run. If the pull request closed while this
+      # job deployed, the cleanup workflow can run before the deploy and find
+      # nothing to delete. Look at the state of the pull request again after
+      # the deploy, and delete the preview if it closed. Run also after a
+      # failure or a cancel, because the deploy can attach the domain and stop.
+      - name: Check pull request is still open
+        if: ${{ always() }}
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          state=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .state)
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          if [ "$state" = "open" ]; then
+            echo "The pull request is open. Keeping the preview."
+          else
+            echo "::notice::The pull request closed during the deploy. Deleting the preview."
+          fi
+
+      - name: Delete preview if closed
+        if: ${{ always() && steps.state.outputs.state == 'closed' }}
+        uses: ./.ci/actions/delete-preview
+        with:
+          worker-name: ${{ env.WORKER_NAME }}
+          hosts: ${{ env.PREVIEW_HOST }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ inputs.account-id }}
