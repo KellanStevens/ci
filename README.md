@@ -53,3 +53,16 @@ workflows, and shellcheck on the scripts of the actions. To run them locally:
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c sh -c \
   'actionlint && shellcheck --external-sources $(git ls-files "*.sh")'
 ```
+
+## Actions
+
+### `actions/setup`
+
+Install Bun and Node at the versions in `.bun-version` and `.nvmrc`, restore
+`node_modules`, and, with `build-cache: true`, the Astro build cache.
+
+```yaml
+- uses: KellanStevens/ci/actions/setup@<sha> # v1.0.0
+  with:
+    build-cache: true # in jobs that run `bun run build`
+```
