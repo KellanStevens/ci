@@ -109,3 +109,9 @@ which needs Zone Read on the token.
 
 Fail unless Cloudflare Access protects a hostname. Output `public` is `"true"`
 when the site answered without a login, so that the job can take it down.
+
+### `actions/preview-comment`
+
+Keep one comment with the preview link on a pull request, and edit it on each
+push. Needs `pull-requests: write`. Keep the `marker` of the comments a site
+already has, or the next push adds a second comment.
