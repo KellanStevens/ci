@@ -298,7 +298,17 @@ jobs:
         run: |
           args=()
           if [ "$WORKER" = true ]; then
-            args+=("$WORKER_SRC/index.js" --no-bundle)
+            # Given a script, Wrangler looks for its config next to the
+            # script, so name the config of main.
+            config=
+            for f in wrangler.jsonc wrangler.json wrangler.toml; do
+              if [ -f "$f" ]; then config=$f; break; fi
+            done
+            if [ -z "$config" ]; then
+              echo "::error::No Wrangler config in the repository root."
+              exit 1
+            fi
+            args+=("$WORKER_SRC/index.js" --no-bundle --config "$config")
           fi
           args+=(
             --env "$WRANGLER_ENV"
