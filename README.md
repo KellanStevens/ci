@@ -43,3 +43,13 @@ secrets:
 The reusable workflows set `environment: production` or `environment: preview`
 on their deploy jobs, so the environment secrets and protection rules of the
 site apply.
+
+## Development
+
+`lint.yml` runs [actionlint](https://github.com/rhysd/actionlint) on the
+workflows, and shellcheck on the scripts of the actions. To run them locally:
+
+```sh
+nix shell nixpkgs#actionlint nixpkgs#shellcheck -c sh -c \
+  'actionlint && shellcheck --external-sources $(git ls-files "*.sh")'
+```
