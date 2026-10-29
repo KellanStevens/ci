@@ -86,3 +86,21 @@ name can read another secret or a variable, as `NAME=SOURCE`.
 
 The file is JSON, so a value can hold any character. `file` is empty when
 there are no secrets to upload.
+
+### `actions/remove-domain` and `actions/delete-preview`
+
+`remove-domain` detaches a Workers custom domain and its DNS record.
+`delete-preview` detaches the domains of a preview and deletes its Worker.
+Neither fails if there is nothing to delete, so they can run more than once.
+`delete-preview` needs Wrangler, from `actions/setup`.
+
+```yaml
+- uses: KellanStevens/ci/actions/delete-preview@<sha> # v1.0.0
+  with:
+    worker-name: example-pr-12
+    hosts: pr-12.example.com
+    cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+Without `account-id`, they find the account from the zone of the hostname,
+which needs Zone Read on the token.

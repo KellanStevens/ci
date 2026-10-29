@@ -1,0 +1,40 @@
+name: Delete preview
+description: >-
+  Delete the preview Worker of a pull request and detach its custom domains.
+  A missing domain or Worker is not an error. Run the setup action first, for
+  Wrangler.
+
+inputs:
+  worker-name:
+    description: The preview Worker, for example example-pr-12.
+    required: true
+  hosts:
+    description: >-
+      The hostnames of the preview, separated by spaces or new lines. Include
+      old hostname patterns until no open pull request uses them.
+    required: true
+  cloudflare-api-token:
+    description: A token with Workers Scripts Edit (and Zone Read without account-id).
+    required: true
+  account-id:
+    description: >-
+      The Cloudflare account. Leave empty to find it from the zone of each
+      hostname, and to let Wrangler take it from wrangler.jsonc.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Delete ${{ inputs.worker-name }}
+      shell: bash
+      env:
+        WORKER_NAME: ${{ inputs.worker-name }}
+        HOSTS: ${{ inputs.hosts }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+      run: |
+        set -f
+        # Unset when empty, so that Wrangler reads the account from wrangler.jsonc.
+        [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || unset CLOUDFLARE_ACCOUNT_ID
+        # shellcheck disable=SC2086 # Split the list of hostnames.
+        "$GITHUB_ACTION_PATH/delete-preview.sh" "$WORKER_NAME" $HOSTS
