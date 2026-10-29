@@ -1,0 +1,6 @@
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      # job.workflow_repository and job.workflow_sha are newer than actionlint
+      # 1.7.12. Remove this when actionlint knows them.
+      - 'property "workflow_(repository|sha)" is not defined in object type \{check_run_id'
