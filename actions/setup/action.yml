@@ -1,0 +1,63 @@
+name: Set up
+description: >-
+  Install Bun and Node at the versions in .bun-version and .nvmrc, restore
+  node_modules and, optionally, the Astro build cache.
+
+inputs:
+  build-cache:
+    description: >-
+      Restore the Astro build cache (optimised images, fonts and the content
+      layer store). Set this in jobs that run `bun run build`.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # The flake supplies Bun and Node for local development. CI reads the same
+    # versions from these files, and the dev shell warns when they differ.
+    - name: Install Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version-file: .bun-version
+
+    - name: Install Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        package-manager-cache: false
+
+    # Cache node_modules itself, not the Bun download cache, so that a hit
+    # skips `bun install`. The key is exact: a lockfile or runtime change
+    # installs from scratch, so stale packages never carry over.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', '.bun-version', '.nvmrc') }}
+
+    - name: Install dependencies
+      if: ${{ steps.node-modules.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Save straight after the install, before a build writes to
+    # node_modules/.astro. The build cache below has its own key.
+    - name: Save node_modules
+      if: ${{ steps.node-modules.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: node_modules
+        key: ${{ steps.node-modules.outputs.cache-primary-key }}
+
+    # Astro keeps optimised images, downloaded fonts and the content layer
+    # store in node_modules/.astro, and reuses them when the inputs have not
+    # changed. A new key is saved at the end of the job when the source
+    # changes, and restore-keys starts from the newest older cache.
+    - name: Cache Astro build
+      if: ${{ inputs.build-cache == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: node_modules/.astro
+        key: astro-${{ runner.os }}-${{ hashFiles('src/**', 'public/**', 'astro.config.mjs', 'bun.lock') }}
+        restore-keys: astro-${{ runner.os }}-
