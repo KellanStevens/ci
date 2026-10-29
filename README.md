@@ -150,3 +150,24 @@ check:
   with:
     scripts: lint typecheck test build
 ```
+
+### `deploy.yml`
+
+Deploy the `site` artifact to production, in the `production` environment.
+Never cancelled once it starts. With `require-access: true`, it checks that
+Cloudflare Access protects the site, and removes the domain if not.
+
+```yaml
+deploy:
+  needs: check
+  if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  uses: KellanStevens/ci/.github/workflows/deploy.yml@<sha> # v1.0.0
+  with:
+    url: https://www.example.com
+  secrets:
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+A reusable workflow receives only the secrets that it names. To upload a new
+Worker secret, add it to `on.workflow_call.secrets` of `deploy.yml` and
+`preview.yml` first.

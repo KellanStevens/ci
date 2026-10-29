@@ -1,0 +1,157 @@
+name: Deploy
+
+# Deploy the build of check.yml to production. Call it from a job that runs
+# only on pushes to main, and needs the check job.
+
+on:
+  workflow_call:
+    inputs:
+      url:
+        description: >-
+          The production URL, for the environment link and the Access check,
+          for example https://www.example.com. Keep it in sync with the
+          custom domain in wrangler.jsonc.
+        type: string
+        required: true
+      site-path:
+        description: The directory that the build writes, and Wrangler serves.
+        type: string
+        default: dist
+      wrangler-env:
+        description: >-
+          The Wrangler environment. Empty is the top level of wrangler.jsonc,
+          which is production.
+        type: string
+        default: ""
+      required-secrets:
+        description: >-
+          Worker secrets to upload with the deploy, which must not be empty.
+          See the worker-secrets action. Leave empty if the Worker keeps its
+          secrets in Cloudflare.
+        type: string
+        default: ""
+      optional-secrets:
+        description: Worker secrets to upload if they are set.
+        type: string
+        default: ""
+      require-access:
+        description: >-
+          The site must be behind Cloudflare Access. After the deploy, check
+          that a visitor with no login gets the Access login. If the site is
+          public, remove its domain and fail.
+        type: boolean
+        default: false
+      account-id:
+        description: >-
+          The Cloudflare account, to remove the domain. Leave empty to find
+          it from the zone.
+        type: string
+        default: ""
+    # Each Worker secret that a site uploads must be listed here, because a
+    # reusable workflow receives only the secrets that it names. Add a new one
+    # here before a site can use it.
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      RESEND_API_KEY:
+        required: false
+      TURNSTILE_SECRET_KEY:
+        required: false
+    outputs:
+      url:
+        description: The production URL.
+        value: ${{ jobs.deploy.outputs.url }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ inputs.url }}
+    # Never cancel a production deploy that has started.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    outputs:
+      url: ${{ inputs.url }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
+      - name: Set up
+        uses: ./.ci/actions/setup
+
+      - name: Download site
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ${{ inputs.site-path }}/
+
+      - name: Write Worker secrets
+        id: secrets
+        uses: ./.ci/actions/worker-secrets
+        with:
+          required: ${{ inputs.required-secrets }}
+          optional: ${{ inputs.optional-secrets }}
+          secrets: ${{ toJSON(secrets) }}
+          vars: ${{ toJSON(vars) }}
+
+      - name: Deploy to production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_ENV: ${{ inputs.wrangler-env }}
+          SECRETS_FILE: ${{ steps.secrets.outputs.file }}
+        run: |
+          # Name the environment, even the top level: wrangler warns when a
+          # config has environments and none is given.
+          args=(--env "$WRANGLER_ENV" --tag "$GITHUB_SHA" --message "main @ ${GITHUB_SHA::7}")
+          if [ -n "$SECRETS_FILE" ]; then
+            args+=(--secrets-file "$SECRETS_FILE")
+          fi
+          bunx wrangler deploy "${args[@]}"
+
+      - name: Find host
+        if: ${{ inputs.require-access }}
+        id: host
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          host=${URL#https://}
+          host=${host%%/*}
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+
+      - name: Check Access
+        if: ${{ inputs.require-access }}
+        id: access
+        uses: ./.ci/actions/check-access
+        with:
+          host: ${{ steps.host.outputs.host }}
+
+      # Take the site off the internet until Access protects it. Re-run this
+      # job after adding the Access application.
+      - name: Remove public domain
+        if: ${{ failure() && steps.access.outputs.public == 'true' }}
+        uses: ./.ci/actions/remove-domain
+        with:
+          host: ${{ steps.host.outputs.host }}
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          account-id: ${{ inputs.account-id }}
