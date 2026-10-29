@@ -66,3 +66,23 @@ Install Bun and Node at the versions in `.bun-version` and `.nvmrc`, restore
   with:
     build-cache: true # in jobs that run `bun run build`
 ```
+
+### `actions/worker-secrets`
+
+Write the Worker secrets for `wrangler deploy --secrets-file`. A required
+secret that is empty stops the job, and an optional one gives a warning. A
+name can read another secret or a variable, as `NAME=SOURCE`.
+
+```yaml
+- id: secrets
+  uses: KellanStevens/ci/actions/worker-secrets@<sha> # v1.0.0
+  with:
+    required: ACCESS_AUD=ACCESS_AUD_PREVIEW TURNSTILE_SECRET_KEY
+    optional: RESEND_API_KEY
+    secrets: ${{ toJSON(secrets) }}
+    vars: ${{ toJSON(vars) }}
+- run: bunx wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
+```
+
+The file is JSON, so a value can hold any character. `file` is empty when
+there are no secrets to upload.
