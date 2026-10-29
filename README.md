@@ -235,3 +235,27 @@ jobs:
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
+
+## Renovate
+
+`renovate/default.json` holds the shared settings: weekly updates after three
+days, grouped minor and patch updates, Bun, GitHub Actions, and updates of
+this repository as soon as they are released. `renovate/astro.json` and
+`renovate/react.json` group packages that release together.
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>KellanStevens/ci//renovate/default",
+    "github>KellanStevens/ci//renovate/astro"
+  ]
+}
+```
+
+Add the rules that only one site needs to that site's `renovate.json`.
+
+## Releases
+
+Tag each release `vX.Y.Z` on main. Renovate opens a pull request in each site
+that moves its pins to the new tag.
