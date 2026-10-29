@@ -135,3 +135,18 @@ audit:
     # GHSA-gcqx-w48m-w2h4: deepmerge, no fix yet. Only the shadcn CLI uses it.
     ignore: GHSA-gcqx-w48m-w2h4
 ```
+
+### `check.yml`
+
+Run the package scripts of a site in one job, then upload the build as the
+`site` artifact for `deploy.yml` and `preview.yml`. Each script runs even if an
+earlier one failed, so one run reports all failures. Drafts and forks upload
+nothing. With `worker-bundle: true`, it also bundles the Worker script of a
+pull request for its preview.
+
+```yaml
+check:
+  uses: KellanStevens/ci/.github/workflows/check.yml@<sha> # v1.0.0
+  with:
+    scripts: lint typecheck test build
+```
