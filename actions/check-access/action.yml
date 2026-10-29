@@ -1,0 +1,32 @@
+name: Check Access
+description: >-
+  Fail unless Cloudflare Access protects a hostname. For sites that must never
+  be public: run it after each deploy, and take the site down if it fails.
+
+inputs:
+  host:
+    description: The hostname to check, for example pr-12.example.com.
+    required: true
+
+outputs:
+  public:
+    description: >-
+      "true" if the site answered without a login. Empty if Access protects
+      it, or if the check could not reach it.
+    value: ${{ steps.check.outputs.public }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check Access on ${{ inputs.host }}
+      id: check
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+      run: |
+        status=0
+        "$GITHUB_ACTION_PATH/check-access.sh" "$HOST" || status=$?
+        if [ "$status" -eq 1 ]; then
+          echo "public=true" >> "$GITHUB_OUTPUT"
+        fi
+        exit "$status"
