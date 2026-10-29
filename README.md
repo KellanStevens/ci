@@ -115,3 +115,20 @@ when the site answered without a login, so that the job can take it down.
 Keep one comment with the preview link on a pull request, and edit it on each
 push. Needs `pull-requests: write`. Keep the `marker` of the comments a site
 already has, or the next push adds a second comment.
+
+## Reusable workflows
+
+A job that calls a reusable workflow shows in the checks as
+`<caller job> / <job>`, for example `check / check`.
+
+### `audit.yml`
+
+Check `bun.lock` for known vulnerabilities. Do not make a deploy wait for it.
+
+```yaml
+audit:
+  uses: KellanStevens/ci/.github/workflows/audit.yml@<sha> # v1.0.0
+  with:
+    # GHSA-gcqx-w48m-w2h4: deepmerge, no fix yet. Only the shadcn CLI uses it.
+    ignore: GHSA-gcqx-w48m-w2h4
+```
