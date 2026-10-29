@@ -107,3 +107,8 @@ Neither fails if there is nothing to delete, so they can run more than once.
 
 Without `account-id`, they find the account from the zone of the hostname,
 which needs Zone Read on the token.
+
+### `actions/check-access`
+
+Fail unless Cloudflare Access protects a hostname. Output `public` is `"true"`
+when the site answered without a login, so that the job can take it down.
