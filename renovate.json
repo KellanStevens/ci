@@ -1,4 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>KellanStevens/ci//renovate/default"]
+  "extends": ["local>KellanStevens/ci//renovate/default"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "actionlint in lint.yml: the release tag, and the SHA-256 of its linux_amd64 archive",
+      "managerFilePatterns": ["/^\\.github/workflows/lint\\.yml$/"],
+      "matchStrings": [
+        "VERSION: (?<currentValue>v\\S+)\\s+SHA256: (?<currentDigest>[0-9a-f]{64})"
+      ],
+      "depNameTemplate": "rhysd/actionlint",
+      "datasourceTemplate": "github-release-attachments"
+    }
+  ]
 }
