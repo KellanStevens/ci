@@ -82,6 +82,17 @@ on:
           the preview and fail.
         type: boolean
         default: false
+      paths:
+        description: >-
+          Deploy a preview only if the pull request changes a file under one
+          of these paths, one per line. A path is a file, a directory (it
+          matches everything below it), or a glob where * also matches /, for
+          example "src", "public/" or "**/*.astro". Empty previews every pull
+          request. The check covers the whole pull request, not only the
+          last push, so a preview stays current once the pull request has
+          touched one of the paths.
+        type: string
+        default: ""
       comment-marker:
         description: >-
           The hidden marker of the preview comment. Empty is "<name>-preview".
@@ -141,6 +152,7 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           NAME: ${{ inputs.name }}
           HOST: ${{ inputs.host }}
+          PATHS: ${{ inputs.paths }}
         run: |
           if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::\"$HEAD_SHA\" is not a commit SHA."
@@ -154,6 +166,31 @@ jobs:
             echo "::notice::No open pull request that is ready for review is at $HEAD_SHA. Nothing to deploy."
             echo "number=" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          # Skip a pull request that changes none of the paths, for example
+          # one that edits only the README or the workflows. The file list
+          # comes from the API, not from the files of the run.
+          if [ -n "${PATHS//[[:space:]]/}" ]; then
+            matched=false
+            files=$(gh api --paginate "repos/$REPO/pulls/$number/files" --jq '.[] | .filename, (.previous_filename // empty)')
+            while IFS= read -r file && [ "$matched" = false ]; do
+              while IFS= read -r path; do
+                path=${path//[[:space:]]/}
+                path=${path#./}
+                [ -n "$path" ] || continue
+                # shellcheck disable=SC2053
+                if [[ "$file" == "$path" || "$file" == "${path%/}/"* || "$file" == $path ]]; then
+                  matched=true
+                  break
+                fi
+              done <<< "$PATHS"
+            done <<< "$files"
+            if [ "$matched" = false ]; then
+              echo "::notice::Pull request #$number changes none of the preview paths. Nothing to deploy."
+              echo "number=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
 
           host=${HOST//\{pr\}/$number}
