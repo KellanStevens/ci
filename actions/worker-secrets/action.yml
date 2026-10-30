@@ -18,12 +18,12 @@ inputs:
     default: ""
   secrets:
     description: >-
-      The secrets to read, as `${{ toJSON(secrets) }}`. A composite action
+      The secrets to read, as toJSON(secrets) in an expression. A composite action
       cannot read the secrets context itself.
     required: true
   vars:
     description: >-
-      The variables to read, as `${{ toJSON(vars) }}`, for values that are
+      The variables to read, as toJSON(vars) in an expression, for values that are
       not secret but stay out of git. A secret wins over a variable of the
       same name.
     default: "{}"

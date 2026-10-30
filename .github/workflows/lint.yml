@@ -55,3 +55,33 @@ jobs:
             exit 0
           fi
           shellcheck --external-sources "${scripts[@]}"
+
+  # actionlint does not load the action.yml files the way the runner does. For
+  # example, the runner evaluates ${{ }} even in an input's description. Run
+  # the actions that need no Cloudflare token, so that a broken action.yml
+  # fails here and not in a site's deploy.
+  actions:
+    name: actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Write Worker secrets
+        id: secrets
+        uses: ./actions/worker-secrets
+        with:
+          optional: CI_TEST_UNSET
+          secrets: "{}"
+
+      - name: Check Worker secrets
+        env:
+          FILE: ${{ steps.secrets.outputs.file }}
+        run: |
+          if [ -n "$FILE" ]; then
+            echo "::error::Expected no secrets file, got \"$FILE\"."
+            exit 1
+          fi
