@@ -75,8 +75,7 @@ jobs:
         uses: ./actions/worker-secrets
         with:
           optional: CI_TEST_UNSET
-          secrets: ${{ toJSON(secrets) }}
-          vars: ${{ toJSON(vars) }}
+          secrets: "{}"
 
       - name: Check Worker secrets
         env:
