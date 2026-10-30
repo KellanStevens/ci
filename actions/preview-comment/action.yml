@@ -1,9 +1,9 @@
 name: Preview comment
 description: >-
   Keep one comment with the state of the preview on a pull request: deploying,
-  deployed with the link, failed or removed. Later pushes and later states edit it, so
-  the conversation does not fill with a new comment each time. Needs
-  pull-requests: write.
+  deployed with the link, failed or removed. Later pushes and later states
+  edit it, so the conversation does not fill with a new comment each time.
+  Needs pull-requests: write.
 
 inputs:
   pr-number:

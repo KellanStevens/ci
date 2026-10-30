@@ -90,8 +90,6 @@ jobs:
       - name: Find preview
         id: find
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr-number }}
           NAME: ${{ inputs.name }}
           HOST: ${{ inputs.host }}
@@ -108,7 +106,6 @@ jobs:
             echo "worker=$NAME-pr-$PR_NUMBER"
             echo "host=${HOST//\{pr\}/$PR_NUMBER}"
           } >> "$GITHUB_OUTPUT"
-          echo "sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)" >> "$GITHUB_OUTPUT"
 
       - name: Delete preview
         uses: ./.ci/actions/delete-preview
@@ -118,14 +115,28 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
+      # Only the comment needs the commit, so look it up after the delete. A
+      # failed lookup skips the comment, and never keeps a preview up.
+      - name: Find commit
+        id: commit
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: |
+          sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       # Keep the link and mark it dead. This runs only after a delete that
       # worked, so the comment never claims a removal that did not happen.
       - name: Comment preview removed
+        if: ${{ steps.commit.outputs.sha != '' }}
         continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ inputs.pr-number }}
           url: https://${{ steps.find.outputs.host }}
           status: removed
-          sha: ${{ steps.find.outputs.sha }}
+          sha: ${{ steps.commit.outputs.sha }}
           marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
