@@ -28,8 +28,16 @@ inputs:
       push adds a second comment.
     default: preview
   token:
-    description: A token that can comment on the pull request.
+    description: >-
+      A token that can comment on the pull request. With a token other than
+      the default, set author too.
     default: ${{ github.token }}
+  author:
+    description: >-
+      The login that the token comments as, for example my-app[bot] for a
+      GitHub App, or the user of a personal access token. Only a comment by
+      this login is edited, so with the wrong one each push adds a comment.
+    default: github-actions[bot]
 
 runs:
   using: composite
@@ -44,5 +52,6 @@ runs:
         STATUS: ${{ inputs.status }}
         HEAD_SHA: ${{ inputs.sha }}
         MARKER: ${{ inputs.marker }}
+        AUTHOR: ${{ inputs.author }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: '"$GITHUB_ACTION_PATH/preview-comment.sh"'
