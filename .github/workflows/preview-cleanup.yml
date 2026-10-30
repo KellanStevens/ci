@@ -16,7 +16,8 @@ name: Preview cleanup
 #
 # pull_request_target runs from main, not from the pull request, so it can use
 # the Cloudflare token of the "preview" environment. This workflow checks out
-# main and never runs code from the pull request.
+# only this repository, calls the Cloudflare and GitHub APIs, and never runs
+# code from the pull request or the site.
 
 on:
   workflow_call:
@@ -43,8 +44,7 @@ on:
         default: ""
       account-id:
         description: >-
-          The Cloudflare account. Leave empty to find it from the zone, and to
-          let Wrangler take it from wrangler.jsonc.
+          The Cloudflare account. Leave empty to find it from the zone.
         type: string
         default: ""
     secrets:
@@ -71,11 +71,6 @@ jobs:
       group: preview-cleanup-${{ inputs.pr-number }}
       cancel-in-progress: false
     steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Check out shared CI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,9 +78,6 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .ci
           persist-credentials: false
-
-      - name: Set up
-        uses: ./.ci/actions/setup
 
       - name: Find preview
         id: find

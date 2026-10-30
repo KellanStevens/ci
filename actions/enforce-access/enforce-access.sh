@@ -6,8 +6,7 @@
 #
 # With a Worker name, a failed check deletes that preview Worker and its
 # domain (delete-preview). Without one, it detaches the domain only
-# (remove-domain). Needs CLOUDFLARE_API_TOKEN, and Wrangler for a Worker name.
-# Reads CLOUDFLARE_ACCOUNT_ID.
+# (remove-domain). Needs CLOUDFLARE_API_TOKEN. Reads CLOUDFLARE_ACCOUNT_ID.
 #
 # A site that answers without a login is always taken down. When the site
 # cannot be reached, so Access is neither proven nor disproven, <remove> takes

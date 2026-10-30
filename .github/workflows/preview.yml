@@ -102,7 +102,7 @@ on:
       account-id:
         description: >-
           The Cloudflare account, to delete a preview. Leave empty to find it
-          from the zone, and to let Wrangler take it from wrangler.jsonc.
+          from the zone.
         type: string
         default: ""
     # Each Worker secret that a site uploads must be listed here. See

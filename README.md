@@ -94,7 +94,8 @@ code of the pull request.
 `remove-domain` detaches a Workers custom domain and its DNS record.
 `delete-preview` detaches the domains of a preview and deletes its Worker.
 Neither fails if there is nothing to delete, so they can run more than once.
-`delete-preview` needs Wrangler, from `actions/setup`.
+Any other error fails the step. Both call the Cloudflare API, so they need no
+Wrangler and no `actions/setup`.
 
 ```yaml
 - uses: KellanStevens/ci/actions/delete-preview@<sha> # v1.0.0
@@ -125,8 +126,8 @@ and production alike.
   site that cannot be proven safe is not served. `keep` leaves it up. This
   suits production, where a flaky check should not cause an outage.
 - With `worker-name`, it deletes the preview Worker and its domain, like
-  `delete-preview`, which needs Wrangler from `actions/setup`. Without it, it
-  detaches the domain only, like `remove-domain`.
+  `delete-preview`. Without it, it detaches the domain only, like
+  `remove-domain`.
 
 ```yaml
 - uses: KellanStevens/ci/actions/enforce-access@<sha> # v1.0.0
