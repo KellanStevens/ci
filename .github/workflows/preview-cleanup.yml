@@ -35,12 +35,6 @@ on:
         description: The hostname of a preview, with {pr}, as in preview.yml.
         type: string
         required: true
-      old-hosts:
-        description: >-
-          Old hostname patterns with {pr}, separated by spaces or new lines.
-          Keep one until no open pull request has a preview on it.
-        type: string
-        default: ""
       account-id:
         description: >-
           The Cloudflare account. Leave empty to find it from the zone, and to
@@ -90,30 +84,25 @@ jobs:
         env:
           PR_NUMBER: ${{ inputs.pr-number }}
           NAME: ${{ inputs.name }}
-          HOSTS: ${{ inputs.host }} ${{ inputs.old-hosts }}
+          HOST: ${{ inputs.host }}
         run: |
-          set -f
           if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error::\"$PR_NUMBER\" is not a pull request number."
             exit 1
           fi
-          hosts=()
-          for pattern in $HOSTS; do
-            if [[ "$pattern" != *"{pr}"* ]]; then
-              echo "::error::\"$pattern\" has no {pr} in it."
-              exit 1
-            fi
-            hosts+=("${pattern//\{pr\}/$PR_NUMBER}")
-          done
+          if [[ "$HOST" != *"{pr}"* ]]; then
+            echo "::error::\"$HOST\" has no {pr} in it."
+            exit 1
+          fi
           {
             echo "worker=$NAME-pr-$PR_NUMBER"
-            echo "hosts=${hosts[*]}"
+            echo "host=${HOST//\{pr\}/$PR_NUMBER}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Delete preview
         uses: ./.ci/actions/delete-preview
         with:
           worker-name: ${{ steps.find.outputs.worker }}
-          hosts: ${{ steps.find.outputs.hosts }}
+          hosts: ${{ steps.find.outputs.host }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
