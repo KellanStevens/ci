@@ -1,7 +1,9 @@
 name: Deploy
 
 # Deploy the build of check.yml to production. Call it from a job that runs
-# only on pushes to main, and needs the check job.
+# only on pushes to main, and needs the check job. The guard job fails a run
+# from any other branch or event, so a mistake in the caller cannot deploy a
+# pull request.
 
 on:
   workflow_call:
@@ -70,8 +72,32 @@ defaults:
     shell: bash -euo pipefail {0}
 
 jobs:
+  # Before the deploy job, so that a wrong run never enters the production
+  # environment or sees its secrets. A run by hand (workflow_dispatch) from
+  # the default branch may redeploy it.
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check branch and event
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$EVENT" != push ] && [ "$EVENT" != workflow_dispatch ]; then
+            echo "::error::Production deploys only on push or workflow_dispatch, not on $EVENT."
+            exit 1
+          fi
+          if [ -z "$DEFAULT_BRANCH" ] || [ "$REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Production deploys only from the default branch ($DEFAULT_BRANCH), not from $REF."
+            exit 1
+          fi
+
   deploy:
     name: deploy
+    needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

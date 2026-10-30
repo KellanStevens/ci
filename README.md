@@ -185,6 +185,12 @@ Never cancelled once it starts. With `require-access: true`, it checks that
 Cloudflare Access protects the site, and removes the domain if not. If it
 cannot reach the site to check, the site stays up and the job fails.
 
+A `guard` job runs first and fails unless the run is a push to the default
+branch, or a run by hand (`workflow_dispatch`) from it. A pull request that
+reaches this workflow by mistake fails there, before the `production`
+environment and its secrets. Keep the `if:` on the caller anyway, so that
+other runs skip the job instead of failing.
+
 ```yaml
 deploy:
   needs: check
