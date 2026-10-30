@@ -142,7 +142,8 @@ which needs Zone Read on the token.
 
 Keep one comment with the state of the preview on a pull request, and edit it
 on each push and each state. `status` is `deploying`, `deployed` (the default,
-with the link) or `failed`. Needs `pull-requests: write`. Keep the `marker` of
+with the link), `failed` or `removed`. The comment is a table with an emoji
+title for each state. Needs `pull-requests: write`. Keep the `marker` of
 the comments a site already has, or the next push adds a second comment.
 
 ## Reusable workflows

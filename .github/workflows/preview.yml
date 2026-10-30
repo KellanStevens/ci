@@ -389,3 +389,15 @@ jobs:
           hosts: ${{ env.PREVIEW_HOST }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
+
+      # Replace the link, because the preview is gone.
+      - name: Comment preview removed
+        if: ${{ always() && steps.state.outputs.state == 'closed' }}
+        continue-on-error: true
+        uses: ./.ci/actions/preview-comment
+        with:
+          pr-number: ${{ env.PR_NUMBER }}
+          url: https://${{ env.PREVIEW_HOST }}
+          status: removed
+          sha: ${{ env.HEAD_SHA }}
+          marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}

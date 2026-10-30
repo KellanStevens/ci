@@ -12,24 +12,48 @@ fi
 
 tag="<!-- $MARKER -->"
 sha="\`${HEAD_SHA::7}\`"
+updated=$(date -u '+%Y-%m-%d %H:%M UTC')
 case "$STATUS" in
   deploying)
-    body=$(printf '%s\n**Preview:** deploying to %s ...\n\nBuilding %s. [Workflow run](%s)\n' \
-      "$tag" "$URL" "$sha" "$RUN_URL")
+    title="🚀 Deploying preview…"
+    rows="| **Status** | ⏳ Building and deploying |
+| **Preview** | 🔗 $URL (not live yet) |
+| **Commit** | $sha |
+| **Logs** | [Workflow run]($RUN_URL) |"
+    note="This comment updates when the deploy finishes."
     ;;
   deployed)
-    body=$(printf '%s\n**Preview:** %s\n\nBuilt from %s. [Workflow run](%s)\n' \
-      "$tag" "$URL" "$sha" "$RUN_URL")
+    title="✅ Preview ready"
+    rows="| **Preview** | 🔗 $URL |
+| **Commit** | $sha |
+| **Updated** | 🕐 $updated |
+| **Logs** | [Workflow run]($RUN_URL) |"
+    note=""
     ;;
   failed)
-    body=$(printf '%s\n**Preview:** failed\n\nNo preview for %s. [Workflow run](%s)\n' \
-      "$tag" "$sha" "$RUN_URL")
+    title="❌ Preview failed"
+    rows="| **Status** | 💥 Deploy failed |
+| **Commit** | $sha |
+| **Logs** | [See what went wrong]($RUN_URL) |"
+    note="Push a new commit or re-run the workflow to try again."
+    ;;
+  removed)
+    title="🧹 Preview removed"
+    rows="| **Status** | 🗑️ Deleted with the pull request |
+| **Commit** | $sha |
+| **Updated** | 🕐 $updated |"
+    note=""
     ;;
   *)
-    echo "::error::\"$STATUS\" is not a preview status. Use deploying, deployed or failed."
+    echo "::error::\"$STATUS\" is not a preview status. Use deploying, deployed, failed or removed."
     exit 1
     ;;
 esac
+
+body=$(printf '%s\n### %s\n\n| | |\n|---|---|\n%s\n' "$tag" "$title" "$rows")
+if [ -n "$note" ]; then
+  body+=$(printf '\n\n%s\n' "$note")
+fi
 
 ids=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
   --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$tag\"))) | .id")
