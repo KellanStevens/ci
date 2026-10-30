@@ -255,8 +255,9 @@ jobs:
 
       # The pull request shows nothing of this run, because a workflow_run
       # workflow belongs to main. The comment is how a pull request sees that
-      # a deploy is under way.
+      # a deploy is under way. A comment that fails must not stop the deploy.
       - name: Comment deploying
+        continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ env.PR_NUMBER }}
@@ -387,9 +388,11 @@ jobs:
           account-id: ${{ inputs.account-id }}
 
       # Runs also after a failure, so that the comment does not stay on
-      # "deploying". A cancel stops the job too soon to edit it.
+      # "deploying". A cancel stops the job too soon to edit it. A comment that
+      # fails must not fail a preview that deployed.
       - name: Comment preview result
         if: ${{ always() }}
+        continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ env.PR_NUMBER }}
