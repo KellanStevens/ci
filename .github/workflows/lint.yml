@@ -85,3 +85,20 @@ jobs:
             echo "::error::Expected no secrets file, got \"$FILE\"."
             exit 1
           fi
+
+      - name: Write the Cloudflare token as a Worker secret
+        id: deny
+        continue-on-error: true
+        uses: ./actions/worker-secrets
+        with:
+          required: LEAK=CLOUDFLARE_API_TOKEN
+          secrets: '{"CLOUDFLARE_API_TOKEN": "not-a-token"}'
+
+      - name: Check the token was refused
+        env:
+          OUTCOME: ${{ steps.deny.outcome }}
+        run: |
+          if [ "$OUTCOME" != failure ]; then
+            echo "::error::worker-secrets accepted CLOUDFLARE_API_TOKEN as a source."
+            exit 1
+          fi

@@ -85,7 +85,9 @@ name can read another secret or a variable, as `NAME=SOURCE`.
 ```
 
 The file is JSON, so a value can hold any character. `file` is empty when
-there are no secrets to upload.
+there are no secrets to upload. `CLOUDFLARE_API_TOKEN` and `GITHUB_TOKEN`
+cannot be a source: they belong to the deploy, and a preview Worker runs the
+code of the pull request.
 
 ### `actions/remove-domain` and `actions/delete-preview`
 
