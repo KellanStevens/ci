@@ -320,5 +320,12 @@ Add the rules that only one site needs to that site's `renovate.json`.
 
 ## Releases
 
-Tag each release `vX.Y.Z` on main. Renovate opens a pull request in each site
-that moves its pins to the new tag.
+Run the **Release** workflow from the Actions tab, on main, with the new
+version as `vX.Y.Z`. It tags the commit and drafts a GitHub Release with
+generated notes. Edit the notes, with breaking changes and known issues at the
+top, and publish the draft.
+
+Renovate opens a pull request in each site that moves its pins to the new tag
+as soon as the tag exists, before the draft is published. The
+`protect-release-tags` ruleset stops a `v*` tag from moving or being deleted,
+so fix a bad release with the next version.
