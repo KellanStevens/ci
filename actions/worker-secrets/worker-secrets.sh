@@ -33,9 +33,11 @@ add() {
       ;;
   esac
 
-  value=$(jq -r --arg k "$source" '.[$k] // empty' <<<"$SECRETS_JSON")
+  # Keep the value as a JSON string, not raw: $(...) would drop its trailing
+  # new lines, as at the end of a PEM key.
+  value=$(jq -c --arg k "$source" '.[$k] // empty | select(. != "")' <<<"$SECRETS_JSON")
   if [ -z "$value" ]; then
-    value=$(jq -r --arg k "$source" '.[$k] // empty' <<<"$VARS_JSON")
+    value=$(jq -c --arg k "$source" '.[$k] // empty | select(. != "")' <<<"$VARS_JSON")
   fi
 
   if [ -z "$value" ]; then
@@ -48,7 +50,9 @@ add() {
     return
   fi
 
-  out=$(jq -c --arg k "$name" --arg v "$value" '. + {($k): $v}' <<<"$out")
+  # Through the environment, not an argument: any process on the runner can
+  # read the arguments of another.
+  out=$(VALUE=$value jq -c --arg k "$name" '. + {($k): (env.VALUE | fromjson)}' <<<"$out")
   echo "Added $name."
 }
 
