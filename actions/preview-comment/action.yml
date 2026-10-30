@@ -1,0 +1,40 @@
+name: Preview comment
+description: >-
+  Keep one comment with the preview link on a pull request. Later pushes edit
+  it, so the conversation does not fill with a new comment for each push.
+  Needs pull-requests: write.
+
+inputs:
+  pr-number:
+    description: The pull request.
+    required: true
+  url:
+    description: The preview URL.
+    required: true
+  sha:
+    description: The commit that the preview was built from.
+    required: true
+  marker:
+    description: >-
+      The hidden HTML comment that finds the comment again, without the
+      `<!-- -->`. Keep it when you move a site to this action, or the next
+      push adds a second comment.
+    default: preview
+  token:
+    description: A token that can comment on the pull request.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Comment preview link
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        URL: ${{ inputs.url }}
+        HEAD_SHA: ${{ inputs.sha }}
+        MARKER: ${{ inputs.marker }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: '"$GITHUB_ACTION_PATH/preview-comment.sh"'
