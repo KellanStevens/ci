@@ -24,6 +24,15 @@ add() {
     fi
   done
 
+  # The secrets context also holds the tokens of the deploy itself. A preview
+  # Worker runs the code of the pull request, so it must never get them.
+  case "${source^^}" in
+    CLOUDFLARE_API_TOKEN | GITHUB_TOKEN)
+      echo "::error::$source is a token of the deploy, not a Worker secret."
+      exit 1
+      ;;
+  esac
+
   value=$(jq -r --arg k "$source" '.[$k] // empty' <<<"$SECRETS_JSON")
   if [ -z "$value" ]; then
     value=$(jq -r --arg k "$source" '.[$k] // empty' <<<"$VARS_JSON")
