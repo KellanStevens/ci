@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Add or update the preview comment of a pull request.
 #
-# Reads GH_TOKEN, REPO, PR_NUMBER, URL, STATUS, HEAD_SHA, RUN_URL and MARKER.
-# See action.yml.
+# Reads GH_TOKEN, REPO, PR_NUMBER, URL, STATUS, HEAD_SHA, RUN_URL, MARKER and
+# AUTHOR. See action.yml.
 set -euo pipefail
 
 if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
@@ -56,8 +56,11 @@ if [ -n "$note" ]; then
   body+=$(printf '\n\n%s\n' "$note")
 fi
 
-ids=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
-  --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$tag\"))) | .id")
+# jq, not --jq, so that the author and the marker are values and not part of
+# the filter. --paginate prints one array for each page.
+ids=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" |
+  jq -r --arg author "$AUTHOR" --arg tag "$tag" \
+    '.[] | select(.user.login == $author and (.body | startswith($tag))) | .id')
 comment_id=${ids%%$'\n'*}
 
 # A pull request with no preview comment never had a preview. Do not add one

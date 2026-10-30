@@ -147,6 +147,8 @@ on each push and each state. `status` is `deploying`, `deployed` (the default,
 with the link), `failed` or `removed`. The comment is a table with an emoji
 title for each state. Needs `pull-requests: write`. Keep the `marker` of
 the comments a site already has, or the next push adds a second comment.
+With a `token` other than the default, set `author` to the login it comments
+as, for example `my-app[bot]`. Only a comment by that login is edited.
 
 ## Reusable workflows
 
