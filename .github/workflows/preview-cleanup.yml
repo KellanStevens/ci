@@ -35,6 +35,12 @@ on:
         description: The hostname of a preview, with {pr}, as in preview.yml.
         type: string
         required: true
+      comment-marker:
+        description: >-
+          The hidden marker of the preview comment. Empty is "<name>-preview".
+          See the preview-comment action.
+        type: string
+        default: ""
       account-id:
         description: >-
           The Cloudflare account. Leave empty to find it from the zone, and to
@@ -47,6 +53,8 @@ on:
 
 permissions:
   contents: read
+  # Edit the preview comment.
+  pull-requests: write
 
 defaults:
   run:
@@ -82,6 +90,8 @@ jobs:
       - name: Find preview
         id: find
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr-number }}
           NAME: ${{ inputs.name }}
           HOST: ${{ inputs.host }}
@@ -98,6 +108,7 @@ jobs:
             echo "worker=$NAME-pr-$PR_NUMBER"
             echo "host=${HOST//\{pr\}/$PR_NUMBER}"
           } >> "$GITHUB_OUTPUT"
+          echo "sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)" >> "$GITHUB_OUTPUT"
 
       - name: Delete preview
         uses: ./.ci/actions/delete-preview
@@ -106,3 +117,15 @@ jobs:
           hosts: ${{ steps.find.outputs.host }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
+
+      # Keep the link and mark it dead. This runs only after a delete that
+      # worked, so the comment never claims a removal that did not happen.
+      - name: Comment preview removed
+        continue-on-error: true
+        uses: ./.ci/actions/preview-comment
+        with:
+          pr-number: ${{ inputs.pr-number }}
+          url: https://${{ steps.find.outputs.host }}
+          status: removed
+          sha: ${{ steps.find.outputs.sha }}
+          marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}

@@ -38,8 +38,9 @@ case "$STATUS" in
     note="Push a new commit or re-run the workflow to try again."
     ;;
   removed)
-    title="🧹 Preview removed"
-    rows="| **Status** | 🗑️ Deleted with the pull request |
+    title="🧹 Preview deleted"
+    rows="| **Status** | 🗑️ Deleted after the pull request closed |
+| **Preview** | 🧹 $URL (not accessible anymore) |
 | **Commit** | $sha |
 | **Updated** | 🕐 $updated |"
     note=""
@@ -59,7 +60,11 @@ ids=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
   --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$tag\"))) | .id")
 comment_id=${ids%%$'\n'*}
 
-if [ -n "$comment_id" ]; then
+# A pull request with no preview comment never had a preview. Do not add one
+# only to say that it is gone.
+if [ -z "$comment_id" ] && [ "$STATUS" = removed ]; then
+  echo "No preview comment to update."
+elif [ -n "$comment_id" ]; then
   gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -f body="$body" >/dev/null
   echo "Updated comment $comment_id."
 else
