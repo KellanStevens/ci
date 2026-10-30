@@ -108,7 +108,35 @@ which needs Zone Read on the token.
 ### `actions/check-access`
 
 Fail unless Cloudflare Access protects a hostname. Output `public` is `"true"`
-when the site answered without a login, so that the job can take it down.
+when the site answered without a login, so that the job can take it down. To
+check and take it down in one step, use `enforce-access`.
+
+### `actions/enforce-access`
+
+Check that Cloudflare Access protects a hostname, and take the site down if it
+does not. The step fails unless Access protects the site. Use it for previews
+and production alike.
+
+- A site that answers without a login is always taken down.
+- When the site cannot be reached, Access is neither proven nor disproven.
+  `on-unreachable` decides: `remove` (the default) takes the site down, so a
+  site that cannot be proven safe is not served. `keep` leaves it up. This
+  suits production, where a flaky check should not cause an outage.
+- With `worker-name`, it deletes the preview Worker and its domain, like
+  `delete-preview`, which needs Wrangler from `actions/setup`. Without it, it
+  detaches the domain only, like `remove-domain`.
+
+```yaml
+- uses: KellanStevens/ci/actions/enforce-access@<sha> # v1.0.0
+  with:
+    host: pr-12.example.com
+    worker-name: example-pr-12 # leave out for production
+    on-unreachable: remove # or keep
+    cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+Without `account-id`, it finds the account from the zone of the hostname,
+which needs Zone Read on the token.
 
 ### `actions/preview-comment`
 
@@ -152,7 +180,8 @@ check:
 
 Deploy the `site` artifact to production, in the `production` environment.
 Never cancelled once it starts. With `require-access: true`, it checks that
-Cloudflare Access protects the site, and removes the domain if not.
+Cloudflare Access protects the site, and removes the domain if not. If it
+cannot reach the site to check, the site stays up and the job fails.
 
 ```yaml
 deploy:
@@ -175,7 +204,9 @@ Deploy each pull request to its own Worker, `<name>-pr-<number>`, on its own
 hostname, after CI passes, and comment the link on the pull request. Call it
 from a workflow that runs on `workflow_run` of CI, so that it runs from main
 with the secrets, and the code of the pull request never runs where the
-secrets are. See the comment at the top of the file.
+secrets are. See the comment at the top of the file. With
+`require-access: true`, it deletes a preview that Access does not protect, or
+that it cannot check.
 
 ```yaml
 name: Preview

@@ -324,19 +324,16 @@ jobs:
           echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
           echo "Preview: https://$PREVIEW_HOST" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Check Access
+      # A preview that Access does not protect must not stay up, also if the
+      # check cannot reach it. Deleting a preview costs nothing: the next push
+      # deploys it again.
+      - name: Enforce Access
         if: ${{ inputs.require-access }}
-        uses: ./.ci/actions/check-access
+        uses: ./.ci/actions/enforce-access
         with:
           host: ${{ env.PREVIEW_HOST }}
-
-      # A preview that Access does not protect must not stay up.
-      - name: Delete unprotected preview
-        if: ${{ failure() && inputs.require-access && steps.deploy.outcome == 'success' }}
-        uses: ./.ci/actions/delete-preview
-        with:
           worker-name: ${{ env.WORKER_NAME }}
-          hosts: ${{ env.PREVIEW_HOST }}
+          on-unreachable: remove
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 

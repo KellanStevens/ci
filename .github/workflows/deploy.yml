@@ -139,19 +139,15 @@ jobs:
           host=${host%%/*}
           echo "host=$host" >> "$GITHUB_OUTPUT"
 
-      - name: Check Access
-        if: ${{ inputs.require-access }}
-        id: access
-        uses: ./.ci/actions/check-access
-        with:
-          host: ${{ steps.host.outputs.host }}
-
       # Take the site off the internet until Access protects it. Re-run this
-      # job after adding the Access application.
-      - name: Remove public domain
-        if: ${{ failure() && steps.access.outputs.public == 'true' }}
-        uses: ./.ci/actions/remove-domain
+      # job after adding the Access application. If the check cannot reach the
+      # site, keep it: the site is not proven public, and a check that failed
+      # for a network reason should not cause an outage.
+      - name: Enforce Access
+        if: ${{ inputs.require-access }}
+        uses: ./.ci/actions/enforce-access
         with:
           host: ${{ steps.host.outputs.host }}
+          on-unreachable: keep
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
