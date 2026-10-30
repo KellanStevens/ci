@@ -241,7 +241,9 @@ the `wrangler.jsonc` of main.
 ### `preview-cleanup.yml`
 
 Delete the Worker and domain of a preview when its pull request closes, or by
-hand from the Actions tab.
+hand from the Actions tab. It then edits the preview comment: the link stays, marked
+🧹 and "(not accessible anymore)". It adds no comment to a pull request that has
+none.
 
 ```yaml
 name: Preview cleanup
@@ -258,6 +260,9 @@ permissions:
   contents: read
 jobs:
   cleanup:
+    permissions:
+      contents: read
+      pull-requests: write
     uses: KellanStevens/ci/.github/workflows/preview-cleanup.yml@<sha> # v1.0.0
     with:
       pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}

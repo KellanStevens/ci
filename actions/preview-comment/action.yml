@@ -16,6 +16,7 @@ inputs:
     description: >-
       The state to show: "deploying" (the preview is not up yet), "deployed",
       "failed" or "removed" (the pull request closed and the preview is gone).
+      "removed" only edits an existing comment and never adds one.
     default: deployed
   sha:
     description: The commit that the preview was built from.
