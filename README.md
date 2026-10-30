@@ -211,6 +211,14 @@ secrets are. See the comment at the top of the file. With
 `require-access: true`, it deletes a preview that Access does not protect, or
 that it cannot check.
 
+With `paths`, a pull request gets a preview only if it changes a file under
+one of the paths, so a pull request that edits only the README, `CLAUDE.md` or
+the workflows deploys nothing and adds no comment. One path for each line: a
+file, a directory (everything below it), or a glob where `*` also matches `/`.
+The check covers the whole pull request, not the last push, so once a pull
+request touches a path, every later push previews. Without `paths`, every
+pull request previews.
+
 ```yaml
 name: Preview
 on:
@@ -230,6 +238,11 @@ jobs:
     with:
       name: example
       host: pr-{pr}.example.com
+      paths: |
+        src
+        public
+        package.json
+        bun.lock
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
