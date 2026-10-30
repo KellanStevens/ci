@@ -1,0 +1,53 @@
+name: Worker secrets
+description: >-
+  Write the Worker secrets that a deploy uploads with
+  `wrangler deploy --secrets-file`. Stop if a required secret is empty, and
+  warn if an optional one is.
+
+inputs:
+  required:
+    description: >-
+      Names of the secrets the Worker cannot run without, separated by spaces
+      or new lines. Write NAME to read the GitHub secret or variable of the
+      same name, or NAME=SOURCE to read SOURCE into NAME.
+    default: ""
+  optional:
+    description: >-
+      Names of the secrets the Worker can run without, in the same form. An
+      empty one gives a warning and is left out.
+    default: ""
+  secrets:
+    description: >-
+      The secrets to read, as `${{ toJSON(secrets) }}`. A composite action
+      cannot read the secrets context itself.
+    required: true
+  vars:
+    description: >-
+      The variables to read, as `${{ toJSON(vars) }}`, for values that are
+      not secret but stay out of git. A secret wins over a variable of the
+      same name.
+    default: "{}"
+  help:
+    description: Appended to each error and warning, to say where to fix it.
+    default: See README.md, "Secrets".
+
+outputs:
+  file:
+    description: >-
+      The path of the secrets file, or empty if there are no secrets to
+      upload. Pass it to `wrangler deploy --secrets-file`.
+    value: ${{ steps.write.outputs.file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Write Worker secrets
+      id: write
+      shell: bash
+      env:
+        REQUIRED: ${{ inputs.required }}
+        OPTIONAL: ${{ inputs.optional }}
+        SECRETS_JSON: ${{ inputs.secrets }}
+        VARS_JSON: ${{ inputs.vars }}
+        HELP: ${{ inputs.help }}
+      run: '"$GITHUB_ACTION_PATH/worker-secrets.sh"'

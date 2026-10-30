@@ -1,0 +1,127 @@
+name: Check
+
+# Run the checks of a site in one job, then upload the build for the deploy
+# and preview workflows. They publish exactly the files that this job built.
+#
+# This job runs the code of the pull request, so it gets no secrets.
+
+on:
+  workflow_call:
+    inputs:
+      scripts:
+        description: >-
+          The package.json scripts to run, in order, separated by spaces. Each
+          one runs even if an earlier one failed, so that one run reports all
+          failures. Put the build last.
+        type: string
+        default: lint typecheck build
+      site-path:
+        description: The directory that the build writes, and Wrangler serves.
+        type: string
+        default: dist
+      worker-bundle:
+        description: >-
+          Also bundle the Worker script for the preview, with
+          `wrangler deploy --dry-run`. Set this for a site with a Worker
+          script (`main` in wrangler.jsonc). preview.yml uploads the bundle,
+          so that the preview runs the code of the pull request without the
+          pull request running code where the secrets are.
+        type: boolean
+        default: false
+      preview-env:
+        description: The Wrangler environment of the previews.
+        type: string
+        default: preview
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Skip drafts, and skip pull requests from forks. A fork preview would
+      # publish untrusted files on our domain.
+      UPLOAD: >-
+        ${{ github.event_name != 'pull_request'
+          || (!github.event.pull_request.draft
+            && github.event.pull_request.head.repo.full_name == github.repository) }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The actions of this repository, at the commit of this workflow.
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
+      - name: Set up
+        uses: ./.ci/actions/setup
+        with:
+          build-cache: true
+
+      - name: Check
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+        run: |
+          set -f
+          failed=()
+          for script in $SCRIPTS; do
+            if ! [[ "$script" =~ ^[A-Za-z0-9:_-]+$ ]]; then
+              echo "::error::\"$script\" is not a script name."
+              exit 1
+            fi
+            echo "::group::bun run $script"
+            status=0
+            bun run "$script" || status=$?
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error::bun run $script failed."
+              failed+=("$script")
+            fi
+          done
+          if [ "${#failed[@]}" -ne 0 ]; then
+            echo "Failed: ${failed[*]}"
+            exit 1
+          fi
+
+      # The bundle runs only on Cloudflare. preview.yml deploys it with the
+      # wrangler.jsonc of main, not of the pull request.
+      - name: Bundle preview Worker
+        if: ${{ inputs.worker-bundle && github.event_name == 'pull_request' && env.UPLOAD == 'true' }}
+        env:
+          PREVIEW_ENV: ${{ inputs.preview-env }}
+        run: bunx wrangler deploy --dry-run --env "$PREVIEW_ENV" --outdir "$RUNNER_TEMP/worker"
+
+      - name: Upload site
+        if: ${{ env.UPLOAD == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site
+          path: ${{ inputs.site-path }}/
+          # Keep .well-known/ and .assetsignore. preview.yml removes the other
+          # hidden files of a pull request.
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload preview Worker
+        if: ${{ inputs.worker-bundle && github.event_name == 'pull_request' && env.UPLOAD == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker
+          path: ${{ runner.temp }}/worker/
+          retention-days: 1
+          if-no-files-found: error

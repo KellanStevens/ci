@@ -56,3 +56,206 @@ workflows, and shellcheck on the scripts of the actions. To run them locally:
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c sh -c \
   'actionlint && shellcheck --external-sources $(git ls-files "*.sh")'
 ```
+
+## Actions
+
+### `actions/setup`
+
+Install Bun and Node at the versions in `.bun-version` and `.nvmrc`, restore
+`node_modules`, and, with `build-cache: true`, the Astro build cache.
+
+```yaml
+- uses: KellanStevens/ci/actions/setup@<sha> # v1.0.0
+  with:
+    build-cache: true # in jobs that run `bun run build`
+```
+
+### `actions/worker-secrets`
+
+Write the Worker secrets for `wrangler deploy --secrets-file`. A required
+secret that is empty stops the job, and an optional one gives a warning. A
+name can read another secret or a variable, as `NAME=SOURCE`.
+
+```yaml
+- id: secrets
+  uses: KellanStevens/ci/actions/worker-secrets@<sha> # v1.0.0
+  with:
+    required: ACCESS_AUD=ACCESS_AUD_PREVIEW TURNSTILE_SECRET_KEY
+    optional: RESEND_API_KEY
+    secrets: ${{ toJSON(secrets) }}
+    vars: ${{ toJSON(vars) }}
+- run: bunx wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
+```
+
+The file is JSON, so a value can hold any character. `file` is empty when
+there are no secrets to upload.
+
+### `actions/remove-domain` and `actions/delete-preview`
+
+`remove-domain` detaches a Workers custom domain and its DNS record.
+`delete-preview` detaches the domains of a preview and deletes its Worker.
+Neither fails if there is nothing to delete, so they can run more than once.
+`delete-preview` needs Wrangler, from `actions/setup`.
+
+```yaml
+- uses: KellanStevens/ci/actions/delete-preview@<sha> # v1.0.0
+  with:
+    worker-name: example-pr-12
+    hosts: pr-12.example.com
+    cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+Without `account-id`, they find the account from the zone of the hostname,
+which needs Zone Read on the token.
+
+### `actions/check-access`
+
+Fail unless Cloudflare Access protects a hostname. Output `public` is `"true"`
+when the site answered without a login, so that the job can take it down.
+
+### `actions/preview-comment`
+
+Keep one comment with the preview link on a pull request, and edit it on each
+push. Needs `pull-requests: write`. Keep the `marker` of the comments a site
+already has, or the next push adds a second comment.
+
+## Reusable workflows
+
+A job that calls a reusable workflow shows in the checks as
+`<caller job> / <job>`, for example `check / check`.
+
+### `audit.yml`
+
+Check `bun.lock` for known vulnerabilities. Do not make a deploy wait for it.
+
+```yaml
+audit:
+  uses: KellanStevens/ci/.github/workflows/audit.yml@<sha> # v1.0.0
+  with:
+    # GHSA-gcqx-w48m-w2h4: deepmerge, no fix yet. Only the shadcn CLI uses it.
+    ignore: GHSA-gcqx-w48m-w2h4
+```
+
+### `check.yml`
+
+Run the package scripts of a site in one job, then upload the build as the
+`site` artifact for `deploy.yml` and `preview.yml`. Each script runs even if an
+earlier one failed, so one run reports all failures. Drafts and forks upload
+nothing. With `worker-bundle: true`, it also bundles the Worker script of a
+pull request for its preview.
+
+```yaml
+check:
+  uses: KellanStevens/ci/.github/workflows/check.yml@<sha> # v1.0.0
+  with:
+    scripts: lint typecheck test build
+```
+
+### `deploy.yml`
+
+Deploy the `site` artifact to production, in the `production` environment.
+Never cancelled once it starts. With `require-access: true`, it checks that
+Cloudflare Access protects the site, and removes the domain if not.
+
+```yaml
+deploy:
+  needs: check
+  if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  uses: KellanStevens/ci/.github/workflows/deploy.yml@<sha> # v1.0.0
+  with:
+    url: https://www.example.com
+  secrets:
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+A reusable workflow receives only the secrets that it names. To upload a new
+Worker secret, add it to `on.workflow_call.secrets` of `deploy.yml` and
+`preview.yml` first.
+
+### `preview.yml`
+
+Deploy each pull request to its own Worker, `<name>-pr-<number>`, on its own
+hostname, after CI passes, and comment the link on the pull request. Call it
+from a workflow that runs on `workflow_run` of CI, so that it runs from main
+with the secrets, and the code of the pull request never runs where the
+secrets are. See the comment at the top of the file.
+
+```yaml
+name: Preview
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  preview:
+    uses: KellanStevens/ci/.github/workflows/preview.yml@<sha> # v1.0.0
+    # A called workflow cannot have more permissions than its caller.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    with:
+      name: example
+      host: pr-{pr}.example.com
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+A site with a Worker script sets `worker: true` here and `worker-bundle: true`
+in `check.yml`. The preview then runs the Worker code of the pull request with
+the `wrangler.jsonc` of main.
+
+### `preview-cleanup.yml`
+
+Delete the Worker and domain of a preview when its pull request closes, or by
+hand from the Actions tab.
+
+```yaml
+name: Preview cleanup
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number of the preview to delete
+        required: true
+        type: number
+permissions:
+  contents: read
+jobs:
+  cleanup:
+    uses: KellanStevens/ci/.github/workflows/preview-cleanup.yml@<sha> # v1.0.0
+    with:
+      pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+      name: example
+      host: pr-{pr}.example.com
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
+## Renovate
+
+`renovate/default.json` holds the shared settings: weekly updates after three
+days, grouped minor and patch updates, Bun, GitHub Actions, and updates of
+this repository as soon as they are released. `renovate/astro.json` and
+`renovate/react.json` group packages that release together.
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>KellanStevens/ci//renovate/default",
+    "github>KellanStevens/ci//renovate/astro"
+  ]
+}
+```
+
+Add the rules that only one site needs to that site's `renovate.json`.
+
+## Releases
+
+Tag each release `vX.Y.Z` on main. Renovate opens a pull request in each site
+that moves its pins to the new tag.

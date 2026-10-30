@@ -1,0 +1,28 @@
+name: Remove domain
+description: >-
+  Detach a Workers custom domain, and its DNS record. A missing domain is not
+  an error.
+
+inputs:
+  host:
+    description: The hostname to detach, for example pr-12.example.com.
+    required: true
+  cloudflare-api-token:
+    description: A token with Workers Scripts Edit (and Zone Read without account-id).
+    required: true
+  account-id:
+    description: >-
+      The Cloudflare account. Leave empty to find it from the zone of the
+      hostname.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Remove ${{ inputs.host }}
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+      run: '"$GITHUB_ACTION_PATH/remove-domain.sh" "$HOST"'

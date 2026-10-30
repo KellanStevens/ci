@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Shared Renovate settings for the sites. Extend with github>KellanStevens/ci//renovate/default",
+  "extends": ["config:best-practices", "schedule:weekly"],
+  "timezone": "Africa/Johannesburg",
+  "minimumReleaseAge": "3 days",
+  "labels": ["dependencies"],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "One pull request for the remaining minor and patch updates",
+      "groupName": "all non-major dependencies",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": ["bun", "npm"]
+    },
+    {
+      "description": "CI installs the Bun version in .bun-version, so keep the types in step",
+      "groupName": "bun",
+      "matchPackageNames": ["bun", "@types/bun"]
+    },
+    {
+      "description": "One pull request for GitHub Actions. Renovate keeps the SHA pins and version comments",
+      "groupName": "github-actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "Our own shared CI: update it on release, in its own pull request, without waiting",
+      "groupName": "shared CI",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["KellanStevens/ci"],
+      "minimumReleaseAge": null,
+      "schedule": ["at any time"]
+    }
+  ]
+}
