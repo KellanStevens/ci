@@ -10,8 +10,7 @@ inputs:
     required: true
   hosts:
     description: >-
-      The hostnames of the preview, separated by spaces or new lines. Include
-      old hostname patterns until no open pull request uses them.
+      The hostnames of the preview, separated by spaces or new lines.
     required: true
   cloudflare-api-token:
     description: A token with Workers Scripts Edit (and Zone Read without account-id).
