@@ -45,8 +45,17 @@ case "$STATUS" in
 | **Updated** | 🕐 $updated |"
     note=""
     ;;
+  delete-failed)
+    title="⚠️ Preview not deleted"
+    rows="| **Status** | 💥 Could not delete the preview after the pull request closed |
+| **Preview** | 🔗 $URL (may still be live) |
+| **Commit** | $sha |
+| **Updated** | 🕐 $updated |
+| **Logs** | [See what went wrong]($RUN_URL) |"
+    note="Re-run the workflow to try again."
+    ;;
   *)
-    echo "::error::\"$STATUS\" is not a preview status. Use deploying, deployed, failed or removed."
+    echo "::error::\"$STATUS\" is not a preview status. Use deploying, deployed, failed, removed or delete-failed."
     exit 1
     ;;
 esac

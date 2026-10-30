@@ -94,7 +94,8 @@ code of the pull request.
 `remove-domain` detaches a Workers custom domain and its DNS record.
 `delete-preview` detaches the domains of a preview and deletes its Worker.
 Neither fails if there is nothing to delete, so they can run more than once.
-`delete-preview` needs Wrangler, from `actions/setup`.
+Any other error fails the step. Both call the Cloudflare API, so they need no
+Wrangler and no `actions/setup`.
 
 ```yaml
 - uses: KellanStevens/ci/actions/delete-preview@<sha> # v1.0.0
@@ -125,8 +126,8 @@ and production alike.
   site that cannot be proven safe is not served. `keep` leaves it up. This
   suits production, where a flaky check should not cause an outage.
 - With `worker-name`, it deletes the preview Worker and its domain, like
-  `delete-preview`, which needs Wrangler from `actions/setup`. Without it, it
-  detaches the domain only, like `remove-domain`.
+  `delete-preview`. Without it, it detaches the domain only, like
+  `remove-domain`.
 
 ```yaml
 - uses: KellanStevens/ci/actions/enforce-access@<sha> # v1.0.0
@@ -144,11 +145,12 @@ which needs Zone Read on the token.
 
 Keep one comment with the state of the preview on a pull request, and edit it
 on each push and each state. `status` is `deploying`, `deployed` (the default,
-with the link), `failed` or `removed`. The comment is a table with an emoji
-title for each state. Needs `pull-requests: write`. Keep the `marker` of
-the comments a site already has, or the next push adds a second comment.
-With a `token` other than the default, set `author` to the login it comments
-as, for example `my-app[bot]`. Only a comment by that login is edited.
+with the link), `failed`, `removed` or `delete-failed`. The comment is a table
+with an emoji title for each state. Needs `pull-requests: write`. Keep the
+`marker` of the comments a site already has, or the next push adds a second
+comment. With a `token` other than the default, set `author` to the login it
+comments as, for example `my-app[bot]`. Only a comment by that login is
+edited.
 
 ## Reusable workflows
 
@@ -265,7 +267,10 @@ the `wrangler.jsonc` of main.
 Delete the Worker and domain of a preview when its pull request closes, or by
 hand from the Actions tab. It then edits the preview comment: the link stays,
 marked 🧹 and "(not accessible anymore)". It adds no comment to a pull request
-that has none, and skips the comment if it cannot look up the pull request.
+that has none, and skips the comment if it cannot look up the pull request. If
+the delete fails, the job fails and the comment says ⚠️ "Preview not deleted",
+with a link to the run, because the preview may still be live. `preview.yml`
+does the same when the pull request closes during a deploy.
 
 ```yaml
 name: Preview cleanup

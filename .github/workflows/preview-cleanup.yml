@@ -16,7 +16,8 @@ name: Preview cleanup
 #
 # pull_request_target runs from main, not from the pull request, so it can use
 # the Cloudflare token of the "preview" environment. This workflow checks out
-# main and never runs code from the pull request.
+# only this repository, calls the Cloudflare and GitHub APIs, and never runs
+# code from the pull request or the site.
 
 on:
   workflow_call:
@@ -43,8 +44,7 @@ on:
         default: ""
       account-id:
         description: >-
-          The Cloudflare account. Leave empty to find it from the zone, and to
-          let Wrangler take it from wrangler.jsonc.
+          The Cloudflare account. Leave empty to find it from the zone.
         type: string
         default: ""
     secrets:
@@ -71,11 +71,6 @@ jobs:
       group: preview-cleanup-${{ inputs.pr-number }}
       cancel-in-progress: false
     steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Check out shared CI
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,9 +78,6 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .ci
           persist-credentials: false
-
-      - name: Set up
-        uses: ./.ci/actions/setup
 
       - name: Find preview
         id: find
@@ -108,6 +100,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Delete preview
+        id: delete
         uses: ./.ci/actions/delete-preview
         with:
           worker-name: ${{ steps.find.outputs.worker }}
@@ -115,10 +108,12 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
-      # Only the comment needs the commit, so look it up after the delete. A
-      # failed lookup skips the comment, and never keeps a preview up.
+      # Only the comment needs the commit, so look it up after the delete, also
+      # when the delete failed. A failed lookup skips the comment, and never
+      # keeps a preview up.
       - name: Find commit
         id: commit
+        if: ${{ !cancelled() && (steps.delete.outcome == 'success' || steps.delete.outcome == 'failure') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -128,15 +123,16 @@ jobs:
           sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # Keep the link and mark it dead. This runs only after a delete that
-      # worked, so the comment never claims a removal that did not happen.
+      # Keep the link and mark it dead, or say that the delete failed and the
+      # preview may still be live. The status follows the outcome of the
+      # delete, so the comment never claims a removal that did not happen.
       - name: Comment preview removed
-        if: ${{ steps.commit.outputs.sha != '' }}
+        if: ${{ !cancelled() && steps.commit.outputs.sha != '' }}
         continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ inputs.pr-number }}
           url: https://${{ steps.find.outputs.host }}
-          status: removed
+          status: ${{ steps.delete.outcome == 'success' && 'removed' || 'delete-failed' }}
           sha: ${{ steps.commit.outputs.sha }}
           marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}

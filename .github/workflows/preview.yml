@@ -102,7 +102,7 @@ on:
       account-id:
         description: >-
           The Cloudflare account, to delete a preview. Leave empty to find it
-          from the zone, and to let Wrangler take it from wrangler.jsonc.
+          from the zone.
         type: string
         default: ""
     # Each Worker secret that a site uploads must be listed here. See
@@ -423,6 +423,7 @@ jobs:
 
       - name: Delete preview if closed
         if: ${{ always() && steps.state.outputs.state == 'closed' }}
+        id: delete
         uses: ./.ci/actions/delete-preview
         with:
           worker-name: ${{ env.WORKER_NAME }}
@@ -430,14 +431,15 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
-      # Replace the link, because the preview is gone.
+      # Mark the link dead, or say that the delete failed and the preview may
+      # still be live. Never claim a removal that did not happen.
       - name: Comment preview removed
-        if: ${{ always() && steps.state.outputs.state == 'closed' }}
+        if: ${{ always() && (steps.delete.outcome == 'success' || steps.delete.outcome == 'failure') }}
         continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ env.PR_NUMBER }}
           url: https://${{ env.PREVIEW_HOST }}
-          status: removed
+          status: ${{ steps.delete.outcome == 'success' && 'removed' || 'delete-failed' }}
           sha: ${{ env.HEAD_SHA }}
           marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
