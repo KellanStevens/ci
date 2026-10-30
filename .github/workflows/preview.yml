@@ -216,6 +216,18 @@ jobs:
       - name: Set up
         uses: ./.ci/actions/setup
 
+      # The pull request shows nothing of this run, because a workflow_run
+      # workflow belongs to main. The comment is how a pull request sees that
+      # a deploy is under way.
+      - name: Comment deploying
+        uses: ./.ci/actions/preview-comment
+        with:
+          pr-number: ${{ env.PR_NUMBER }}
+          url: https://${{ env.PREVIEW_HOST }}
+          status: deploying
+          sha: ${{ env.HEAD_SHA }}
+          marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
+
       # Outside the checkout, so that no file of the run lands on a path that
       # this job runs or reads, for example .env.
       - name: Download site
@@ -337,11 +349,15 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
-      - name: Comment preview link
+      # Runs also after a failure, so that the comment does not stay on
+      # "deploying". A cancel stops the job too soon to edit it.
+      - name: Comment preview result
+        if: ${{ always() }}
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ env.PR_NUMBER }}
-          url: ${{ steps.deploy.outputs.url }}
+          url: https://${{ env.PREVIEW_HOST }}
+          status: ${{ job.status == 'success' && 'deployed' || 'failed' }}
           sha: ${{ env.HEAD_SHA }}
           marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
 

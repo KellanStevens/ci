@@ -140,9 +140,10 @@ which needs Zone Read on the token.
 
 ### `actions/preview-comment`
 
-Keep one comment with the preview link on a pull request, and edit it on each
-push. Needs `pull-requests: write`. Keep the `marker` of the comments a site
-already has, or the next push adds a second comment.
+Keep one comment with the state of the preview on a pull request, and edit it
+on each push and each state. `status` is `deploying`, `deployed` (the default,
+with the link) or `failed`. Needs `pull-requests: write`. Keep the `marker` of
+the comments a site already has, or the next push adds a second comment.
 
 ## Reusable workflows
 
@@ -201,7 +202,8 @@ Worker secret, add it to `on.workflow_call.secrets` of `deploy.yml` and
 ### `preview.yml`
 
 Deploy each pull request to its own Worker, `<name>-pr-<number>`, on its own
-hostname, after CI passes, and comment the link on the pull request. Call it
+hostname, after CI passes, and comment on the pull request when the deploy
+starts, then with the link, or that it failed. Call it
 from a workflow that runs on `workflow_run` of CI, so that it runs from main
 with the secrets, and the code of the pull request never runs where the
 secrets are. See the comment at the top of the file. With

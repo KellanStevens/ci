@@ -1,8 +1,9 @@
 name: Preview comment
 description: >-
-  Keep one comment with the preview link on a pull request. Later pushes edit
-  it, so the conversation does not fill with a new comment for each push.
-  Needs pull-requests: write.
+  Keep one comment with the state of the preview on a pull request: deploying,
+  deployed with the link, or failed. Later pushes and later states edit it, so
+  the conversation does not fill with a new comment each time. Needs
+  pull-requests: write.
 
 inputs:
   pr-number:
@@ -11,6 +12,11 @@ inputs:
   url:
     description: The preview URL.
     required: true
+  status:
+    description: >-
+      The state to show: "deploying" (the preview is not up yet), "deployed"
+      or "failed".
+    default: deployed
   sha:
     description: The commit that the preview was built from.
     required: true
@@ -34,6 +40,7 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ inputs.pr-number }}
         URL: ${{ inputs.url }}
+        STATUS: ${{ inputs.status }}
         HEAD_SHA: ${{ inputs.sha }}
         MARKER: ${{ inputs.marker }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
