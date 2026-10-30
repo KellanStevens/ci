@@ -216,12 +216,11 @@ Worker secret, add it to `on.workflow_call.secrets` of `deploy.yml` and
 
 Deploy each pull request to its own Worker, `<name>-pr-<number>`, on its own
 hostname, after CI passes, and comment on the pull request when the deploy
-starts, then with the link, or that it failed. Call it
-from a workflow that runs on `workflow_run` of CI, so that it runs from main
-with the secrets, and the code of the pull request never runs where the
-secrets are. See the comment at the top of the file. With
-`require-access: true`, it deletes a preview that Access does not protect, or
-that it cannot check.
+starts, then with the link, or that it failed. Call it from a workflow that
+runs on `workflow_run` of CI, so that it runs from main with the secrets, and
+the code of the pull request never runs where the secrets are. See the comment
+at the top of the file. With `require-access: true`, it deletes a preview that
+Access does not protect, or that it cannot check.
 
 With `paths`, a pull request gets a preview only if it changes a file under
 one of the paths, so a pull request that edits only the README, `CLAUDE.md` or
@@ -268,10 +267,10 @@ the `wrangler.jsonc` of main.
 Delete the Worker and domain of a preview when its pull request closes, or by
 hand from the Actions tab. It then edits the preview comment: the link stays,
 marked 🧹 and "(not accessible anymore)". It adds no comment to a pull request
-that has none. If the delete fails, the job fails and the comment says ⚠️
-"Preview not deleted", with a link to the run, because the preview may still
-be live. `preview.yml` does the same when the pull request closes during a
-deploy.
+that has none, and skips the comment if it cannot look up the pull request. If
+the delete fails, the job fails and the comment says ⚠️ "Preview not deleted",
+with a link to the run, because the preview may still be live. `preview.yml`
+does the same when the pull request closes during a deploy.
 
 ```yaml
 name: Preview cleanup

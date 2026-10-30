@@ -29,14 +29,16 @@ jobs:
 
       # actionlint checks the workflows, and runs shellcheck on their run:
       # blocks. The checksum comes from the checksums file of the release.
+      # Renovate updates VERSION and SHA256 together (customManagers in
+      # renovate.json), so VERSION is the release tag, with its "v".
       - name: Install actionlint
         env:
-          VERSION: 1.7.12
+          VERSION: v1.7.12
           SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
           archive="$RUNNER_TEMP/actionlint.tar.gz"
           curl -fsSLo "$archive" \
-            "https://github.com/rhysd/actionlint/releases/download/v$VERSION/actionlint_${VERSION}_linux_amd64.tar.gz"
+            "https://github.com/rhysd/actionlint/releases/download/$VERSION/actionlint_${VERSION#v}_linux_amd64.tar.gz"
           echo "$SHA256  $archive" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
 
