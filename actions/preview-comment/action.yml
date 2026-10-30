@@ -1,9 +1,9 @@
 name: Preview comment
 description: >-
   Keep one comment with the state of the preview on a pull request: deploying,
-  deployed with the link, failed or removed. Later pushes and later states edit it, so
-  the conversation does not fill with a new comment each time. Needs
-  pull-requests: write.
+  deployed with the link, failed, removed or not deleted. Later pushes and
+  later states edit it, so the conversation does not fill with a new comment
+  each time. Needs pull-requests: write.
 
 inputs:
   pr-number:
@@ -15,8 +15,11 @@ inputs:
   status:
     description: >-
       The state to show: "deploying" (the preview is not up yet), "deployed",
-      "failed" or "removed" (the pull request closed and the preview is gone).
-      "removed" only edits an existing comment and never adds one.
+      "failed", "removed" (the pull request closed and the preview is gone)
+      or "delete-failed" (the pull request closed, and the preview could not
+      be deleted). "removed" only edits an existing comment and never adds
+      one. "delete-failed" adds one if there is none, because the preview may
+      still be live.
     default: deployed
   sha:
     description: The commit that the preview was built from.

@@ -145,11 +145,12 @@ which needs Zone Read on the token.
 
 Keep one comment with the state of the preview on a pull request, and edit it
 on each push and each state. `status` is `deploying`, `deployed` (the default,
-with the link), `failed` or `removed`. The comment is a table with an emoji
-title for each state. Needs `pull-requests: write`. Keep the `marker` of
-the comments a site already has, or the next push adds a second comment.
-With a `token` other than the default, set `author` to the login it comments
-as, for example `my-app[bot]`. Only a comment by that login is edited.
+with the link), `failed`, `removed` or `delete-failed`. The comment is a table
+with an emoji title for each state. Needs `pull-requests: write`. Keep the
+`marker` of the comments a site already has, or the next push adds a second
+comment. With a `token` other than the default, set `author` to the login it
+comments as, for example `my-app[bot]`. Only a comment by that login is
+edited.
 
 ## Reusable workflows
 
@@ -265,9 +266,12 @@ the `wrangler.jsonc` of main.
 ### `preview-cleanup.yml`
 
 Delete the Worker and domain of a preview when its pull request closes, or by
-hand from the Actions tab. It then edits the preview comment: the link stays, marked
-🧹 and "(not accessible anymore)". It adds no comment to a pull request that has
-none.
+hand from the Actions tab. It then edits the preview comment: the link stays,
+marked 🧹 and "(not accessible anymore)". It adds no comment to a pull request
+that has none. If the delete fails, the job fails and the comment says ⚠️
+"Preview not deleted", with a link to the run, because the preview may still
+be live. `preview.yml` does the same when the pull request closes during a
+deploy.
 
 ```yaml
 name: Preview cleanup

@@ -103,6 +103,7 @@ jobs:
           echo "sha=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)" >> "$GITHUB_OUTPUT"
 
       - name: Delete preview
+        id: delete
         uses: ./.ci/actions/delete-preview
         with:
           worker-name: ${{ steps.find.outputs.worker }}
@@ -110,14 +111,16 @@ jobs:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
-      # Keep the link and mark it dead. This runs only after a delete that
-      # worked, so the comment never claims a removal that did not happen.
+      # Keep the link and mark it dead, or say that the delete failed and the
+      # preview may still be live. The status follows the outcome of the
+      # delete, so the comment never claims a removal that did not happen.
       - name: Comment preview removed
+        if: ${{ !cancelled() && (steps.delete.outcome == 'success' || steps.delete.outcome == 'failure') }}
         continue-on-error: true
         uses: ./.ci/actions/preview-comment
         with:
           pr-number: ${{ inputs.pr-number }}
           url: https://${{ steps.find.outputs.host }}
-          status: removed
+          status: ${{ steps.delete.outcome == 'success' && 'removed' || 'delete-failed' }}
           sha: ${{ steps.find.outputs.sha }}
           marker: ${{ inputs.comment-marker || format('{0}-preview', inputs.name) }}
