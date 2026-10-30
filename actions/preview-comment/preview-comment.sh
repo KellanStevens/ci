@@ -38,8 +38,8 @@ case "$STATUS" in
     note="Push a new commit or re-run the workflow to try again."
     ;;
   removed)
-    title="🧹 Preview removed"
-    rows="| **Status** | 🗑️ Deleted with the pull request |
+    title="🧹 Preview deleted"
+    rows="| **Status** | 🗑️ Deleted after the pull request closed |
 | **Preview** | 🧹 $URL (not accessible anymore) |
 | **Commit** | $sha |
 | **Updated** | 🕐 $updated |"
