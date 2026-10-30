@@ -1,0 +1,88 @@
+name: Release
+
+# Tag a commit of main as a release, and draft its GitHub Release with
+# generated notes. Run it by hand from the Actions tab, then edit the notes
+# and publish the draft.
+#
+# The tag goes up at once, and Renovate in the sites sees it then, not when
+# the draft is published. The protect-release-tags ruleset stops a tag from
+# moving or being deleted, so a version that is out is out: fix forward with
+# the next one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The new version, as vX.Y.Z. It must be newer than every tag.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Create the tag and the draft release.
+      contents: write
+    steps:
+      - name: Check version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::\"$VERSION\" is not a version like v1.2.3."
+            exit 1
+          fi
+          latest=$(gh api --paginate "repos/$REPO/tags" --jq '.[].name' |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          if [ -n "$latest" ]; then
+            newest=$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -n 1)
+            if [ "$VERSION" = "$latest" ] || [ "$newest" != "$VERSION" ]; then
+              echo "::error::$VERSION is not newer than the latest release, $latest."
+              exit 1
+            fi
+          fi
+          echo "Releasing $VERSION after ${latest:-no release}."
+
+      # Through the API, so that the job needs no checkout and no git
+      # credentials. An annotated tag, like the ones made by hand.
+      - name: Tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag=$(gh api --method POST "repos/$REPO/git/tags" \
+            -f tag="$VERSION" -f message="$VERSION" -f object="$GITHUB_SHA" -f type=commit --jq .sha)
+          gh api --method POST "repos/$REPO/git/refs" -f ref="refs/tags/$VERSION" -f sha="$tag" >/dev/null
+          echo "Tagged $GITHUB_SHA as $VERSION."
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          url=$(gh release create "$VERSION" --repo "$REPO" --verify-tag --draft \
+            --title "$VERSION" --generate-notes)
+          {
+            echo "Tagged \`$GITHUB_SHA\` as $VERSION."
+            echo
+            echo "Edit the notes and publish the draft: $url"
+            echo "Breaking changes and known issues go at the top."
+          } >> "$GITHUB_STEP_SUMMARY"
