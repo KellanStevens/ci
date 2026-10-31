@@ -99,11 +99,14 @@ jobs:
 
       # The bundle runs only on Cloudflare. preview.yml deploys it with the
       # wrangler.jsonc of main, not of the pull request.
+      #
+      # --no-install: run only the Wrangler that bun.lock pins, never the latest
+      # one from the registry.
       - name: Bundle preview Worker
         if: ${{ inputs.worker-bundle && github.event_name == 'pull_request' && env.UPLOAD == 'true' }}
         env:
           PREVIEW_ENV: ${{ inputs.preview-env }}
-        run: bunx wrangler deploy --dry-run --env "$PREVIEW_ENV" --outdir "$RUNNER_TEMP/worker"
+        run: bunx --no-install wrangler deploy --dry-run --env "$PREVIEW_ENV" --outdir "$RUNNER_TEMP/worker"
 
       - name: Upload site
         if: ${{ env.UPLOAD == 'true' }}
