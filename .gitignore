@@ -1,0 +1,9 @@
+# Editor and backup files.
+*.bkp
+*.orig
+*.swp
+*~
+
+# Local environment and secrets.
+.env
+.env.*
