@@ -37,6 +37,8 @@ jobs:
     permissions:
       # Create the tag and the draft release.
       contents: write
+      # Read the checks of the commit.
+      checks: read
     steps:
       - name: Check version
         env:
@@ -58,6 +60,26 @@ jobs:
             fi
           fi
           echo "Releasing $VERSION after ${latest:-no release}."
+
+      # A tag cannot be moved, so do not tag a commit that lint.yml has not
+      # passed. Keep the names in step with the jobs of lint.yml.
+      - name: Check lint passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REQUIRED: lint actions
+        run: |
+          results=$(gh api --paginate "repos/$REPO/commits/$GITHUB_SHA/check-runs?per_page=100" \
+            --jq '.check_runs[] | "\(.name) \(.conclusion // "not finished")"')
+          failed=0
+          for check in $REQUIRED; do
+            result=$(grep -F -x -m1 -e "$check success" <<<"$results" || true)
+            if [ -z "$result" ]; then
+              echo "::error::The $check check has not passed on $GITHUB_SHA. Wait for it, or fix it, and run again."
+              failed=1
+            fi
+          done
+          exit "$failed"
 
       # Through the API, so that the job needs no checkout and no git
       # credentials. An annotated tag, like the ones made by hand.
