@@ -47,11 +47,12 @@ jobs:
         run: '"$RUNNER_TEMP/actionlint" -color'
 
       # actionlint does not read composite actions, so check their scripts
-      # here. The runner image includes shellcheck.
+      # here, and the helpers and stubs of the tests. The runner image includes
+      # shellcheck.
       - name: Lint scripts
         if: ${{ !cancelled() }}
         run: |
-          mapfile -t scripts < <(git ls-files '*.sh')
+          mapfile -t scripts < <(git ls-files '*.sh' '*.bash' 'tests/stubs/*')
           if [ "${#scripts[@]}" -eq 0 ]; then
             echo "No scripts yet."
             exit 0
@@ -123,3 +124,28 @@ jobs:
             echo "::error::check-access accepted a bad team name."
             exit 1
           fi
+
+  # Test the scripts of the actions and of the workflows. The tests put stubs of
+  # gh, curl, bun, bunx and sleep ahead of the real ones, so that none of them
+  # reaches the network. Renovate updates BATS_VERSION (customManagers in
+  # renovate.json). Keep the name of this job in step with REQUIRED in
+  # release.yml.
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bats
+        env:
+          BATS_VERSION: 1.13.0
+        run: |
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/bats" "bats@$BATS_VERSION"
+          echo "$RUNNER_TEMP/bats/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: bats --print-output-on-failure tests

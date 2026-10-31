@@ -15,6 +15,11 @@ There are two layers:
 - **Reusable workflows** (`.github/workflows/`): whole jobs for the common
   case, called with `uses:` from a job of the site.
 
+The logic of the workflows lives in scripts (`scripts/`), and the logic of the
+actions in the scripts next to their `action.yml`. A workflow or an action only
+passes its inputs to a script as environment variables, so that every script
+can be tested.
+
 ## Pinning
 
 Pin every reference to a full commit SHA, with the release tag as a comment,
@@ -56,12 +61,40 @@ site apply.
 ## Development
 
 `lint.yml` runs [actionlint](https://github.com/rhysd/actionlint) on the
-workflows, and shellcheck on the scripts of the actions. To run them locally:
+workflows, shellcheck on the scripts and the test helpers, and the tests. To
+run them locally:
 
 ```sh
-nix shell nixpkgs#actionlint nixpkgs#shellcheck -c sh -c \
-  'actionlint && shellcheck --external-sources $(git ls-files "*.sh")'
+nix shell nixpkgs#actionlint nixpkgs#shellcheck nixpkgs#bats -c sh -c \
+  'actionlint &&
+   shellcheck --external-sources $(git ls-files "*.sh" "*.bash" "tests/stubs/*") &&
+   bats tests'
 ```
+
+### Tests
+
+The tests use [Bats](https://github.com/bats-core/bats-core), and there is one
+file in `tests/` for each script: `tests/<script>.bats`. They run the real
+scripts with stubs of `gh`, `curl`, `bun`, `bunx` and `sleep` ahead of the real
+commands (`tests/stubs/`), so that no test reaches the network, and a test
+that needs an answer says what the API returns:
+
+```bash
+@test "deletes the preview when the pull request closed" {
+  route_gh "repos/owner/site/pulls/7" 0 '{"state": "closed"}'
+  run "$script"
+  assert_success
+  assert_output_file "state=closed"
+}
+```
+
+`tests/helpers.bash` has the stubs' routes (`route_gh`, `route_curl`,
+`route_cmd`), what the stubs were called with (`calls`) and the assertions.
+`tests/repository.bats` checks the repository itself: that each workflow runs a
+script that exists, that each script has a test file, and that no `run:` block
+holds more than a few lines of logic.
+
+A new script needs a test file with the same name, or `repository.bats` fails.
 
 ## Actions
 

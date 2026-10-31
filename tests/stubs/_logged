@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Shared by the stubs of bun, bunx and sleep. Logs the call, then exits with
+# the status of the first route whose pattern is in the arguments, or 0.
+#
+# Usage: _logged <name> <argument>...
+set -u
+: "${STUB_DIR:?stub: STUB_DIR is not set}"
+
+name=$1
+shift
+echo "$*" >> "$STUB_DIR/$name.log"
+
+routes=$STUB_DIR/$name.routes
+if [ -f "$routes" ]; then
+  while IFS=$'\t' read -r pattern code; do
+    if [[ "$*" == *"$pattern"* ]]; then
+      exit "$code"
+    fi
+  done < "$routes"
+fi
+exit 0

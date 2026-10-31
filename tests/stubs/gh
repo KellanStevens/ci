@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Stand-in for the GitHub CLI in the tests. It answers from the routes that a
+# test adds with route_gh (see helpers.bash). `--jq FILTER` is applied to the
+# body with `jq -r`, as gh does.
+#
+# Logs the arguments to $STUB_DIR/gh.log, and the value of each -f/-F field to
+# $STUB_DIR/gh.field.<name> (the last one wins).
+set -u
+: "${STUB_DIR:?gh stub: STUB_DIR is not set}"
+
+echo "$*" >> "$STUB_DIR/gh.log"
+
+filter=
+args=("$@")
+i=0
+while [ "$i" -lt "$#" ]; do
+  case ${args[$i]} in
+    --jq) i=$((i + 1)); filter=${args[$i]} ;;
+    -f | -F)
+      i=$((i + 1))
+      field=${args[$i]}
+      printf '%s' "${field#*=}" > "$STUB_DIR/gh.field.${field%%=*}"
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+routes=$STUB_DIR/gh.routes
+n=0 first=0 matches=0
+if [ -f "$routes" ]; then
+  while IFS=$'\t' read -r r_pattern r_exit r_body; do
+    n=$((n + 1))
+    if [[ "$*" == *"$r_pattern"* ]]; then
+      matches=$((matches + 1))
+      if [ "$first" -eq 0 ]; then
+        first=$n code=$r_exit body=$r_body
+      fi
+    fi
+  done < "$routes"
+fi
+if [ "$first" -eq 0 ]; then
+  echo "gh stub: no route for: $*" >&2
+  exit 99
+fi
+# Several routes match: use the first once, then the next. The last one stays.
+if [ "$matches" -gt 1 ]; then sed -i "${first}d" "$routes"; fi
+
+if [ "$code" -ne 0 ]; then
+  echo "gh: stub failure (exit $code)" >&2
+  exit "$code"
+fi
+if [ -n "$filter" ]; then
+  jq -r "$filter" "$body"
+else
+  cat "$body"
+fi
