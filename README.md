@@ -128,12 +128,19 @@ and production alike.
 - With `worker-name`, it deletes the preview Worker and its domain, like
   `delete-preview`. Without it, it detaches the domain only, like
   `remove-domain`.
+- Access protects the hostname, not the `workers.dev` and preview URLs of the
+  same Worker. With `workers-dev-worker`, it turns both off and fails the step
+  if either was on. Set `"workers_dev": false` and `"preview_urls": false` in
+  `wrangler.jsonc` (also in each Wrangler environment), or the next deploy
+  turns them on again. Without it, the step warns that they were not checked.
+  It needs Workers Scripts Edit on the token.
 
 ```yaml
 - uses: KellanStevens/ci/actions/enforce-access@<sha> # v1.0.0
   with:
     host: pr-12.example.com
     worker-name: example-pr-12 # leave out for production
+    workers-dev-worker: example-pr-12 # the Worker to keep off workers.dev
     on-unreachable: remove # or keep
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
@@ -190,6 +197,9 @@ Deploy the `site` artifact to production, in the `production` environment.
 Never cancelled once it starts. With `require-access: true`, it checks that
 Cloudflare Access protects the site, and removes the domain if not. If it
 cannot reach the site to check, the site stays up and the job fails.
+With `worker-name` (the `name` in `wrangler.jsonc`), it also turns off the
+`workers.dev` and preview URLs of the Worker, which skip Access, and fails the
+job if either was on.
 
 A `guard` job runs first and fails unless the run is a push to the default
 branch, or a run by hand (`workflow_dispatch`) from it. A pull request that
@@ -220,7 +230,8 @@ starts, then with the link, or that it failed. Call it from a workflow that
 runs on `workflow_run` of CI, so that it runs from main with the secrets, and
 the code of the pull request never runs where the secrets are. See the comment
 at the top of the file. With `require-access: true`, it deletes a preview that
-Access does not protect, or that it cannot check.
+Access does not protect, or that it cannot check, and turns off the
+`workers.dev` and preview URLs of the preview Worker, which skip Access.
 
 With `paths`, a pull request gets a preview only if it changes a file under
 one of the paths, so a pull request that edits only the README, `CLAUDE.md` or

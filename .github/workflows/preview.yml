@@ -384,6 +384,7 @@ jobs:
           host: ${{ env.PREVIEW_HOST }}
           worker-name: ${{ env.WORKER_NAME }}
           on-unreachable: remove
+          workers-dev-worker: ${{ env.WORKER_NAME }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
 
