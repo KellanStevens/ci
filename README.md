@@ -114,6 +114,12 @@ Fail unless Cloudflare Access protects a hostname. Output `public` is `"true"`
 when the site answered without a login, so that the job can take it down. To
 check and take it down in one step, use `enforce-access`.
 
+Set `access-team` to the team name of your Access login (the `myteam` of
+`myteam.cloudflareaccess.com`). Then only a redirect to that team counts.
+Without it, a redirect to any `*.cloudflareaccess.com` counts, and a preview
+Worker, which runs the code of the pull request, can answer with one and pass
+the check.
+
 ### `actions/enforce-access`
 
 Check that Cloudflare Access protects a hostname, and take the site down if it
@@ -135,11 +141,17 @@ and production alike.
     host: pr-12.example.com
     worker-name: example-pr-12 # leave out for production
     on-unreachable: remove # or keep
+    access-team: myteam
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
 Without `account-id`, it finds the account from the zone of the hostname,
 which needs Zone Read on the token.
+
+The check runs after the deploy, so the Worker is live, and a preview already
+holds its secrets, until the check has run. A site that must never be public
+for even that long needs its Access application in place before the first
+deploy.
 
 ### `actions/preview-comment`
 
@@ -189,7 +201,8 @@ check:
 Deploy the `site` artifact to production, in the `production` environment.
 Never cancelled once it starts. With `require-access: true`, it checks that
 Cloudflare Access protects the site, and removes the domain if not. If it
-cannot reach the site to check, the site stays up and the job fails.
+cannot reach the site to check, the site stays up and the job fails. Pass
+`access-team` too (see `check-access`).
 
 A `guard` job runs first and fails unless the run is a push to the default
 branch, or a run by hand (`workflow_dispatch`) from it. A pull request that
@@ -220,7 +233,8 @@ starts, then with the link, or that it failed. Call it from a workflow that
 runs on `workflow_run` of CI, so that it runs from main with the secrets, and
 the code of the pull request never runs where the secrets are. See the comment
 at the top of the file. With `require-access: true`, it deletes a preview that
-Access does not protect, or that it cannot check.
+Access does not protect, or that it cannot check. Pass `access-team` too (see
+`check-access`).
 
 With `paths`, a pull request gets a preview only if it changes a file under
 one of the paths, so a pull request that edits only the README, `CLAUDE.md` or

@@ -40,9 +40,18 @@ on:
         description: >-
           The site must be behind Cloudflare Access. After the deploy, check
           that a visitor with no login gets the Access login. If the site is
-          public, remove its domain and fail.
+          public, remove its domain and fail. The Worker is live until the
+          check has run, which waits for a new domain to answer.
         type: boolean
         default: false
+      access-team:
+        description: >-
+          The team name of your Access login, the "myteam" of
+          myteam.cloudflareaccess.com. With it, the check accepts only a
+          redirect to that team. Without it, a redirect to any team passes,
+          which a Worker of the site could fake. Set it with require-access.
+        type: string
+        default: ""
       account-id:
         description: >-
           The Cloudflare account, to remove the domain. Leave empty to find
@@ -175,5 +184,6 @@ jobs:
         with:
           host: ${{ steps.host.outputs.host }}
           on-unreachable: keep
+          access-team: ${{ inputs.access-team }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}

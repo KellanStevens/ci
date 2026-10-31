@@ -7,6 +7,13 @@ inputs:
   host:
     description: The hostname to check, for example pr-12.example.com.
     required: true
+  access-team:
+    description: >-
+      The team name of your Access login, the "myteam" of
+      myteam.cloudflareaccess.com. With it, only a redirect to that team counts
+      as Access. Without it, a redirect to any team does, which a preview
+      Worker can fake. Set it.
+    default: ""
 
 outputs:
   public:
@@ -23,6 +30,7 @@ runs:
       shell: bash
       env:
         HOST: ${{ inputs.host }}
+        ACCESS_TEAM: ${{ inputs.access-team }}
       run: |
         status=0
         "$GITHUB_ACTION_PATH/check-access.sh" "$HOST" || status=$?

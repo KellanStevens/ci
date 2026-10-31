@@ -6,7 +6,8 @@
 #
 # With a Worker name, a failed check deletes that preview Worker and its
 # domain (delete-preview). Without one, it detaches the domain only
-# (remove-domain). Needs CLOUDFLARE_API_TOKEN. Reads CLOUDFLARE_ACCOUNT_ID.
+# (remove-domain). Needs CLOUDFLARE_API_TOKEN. Reads CLOUDFLARE_ACCOUNT_ID and
+# ACCESS_TEAM (see check-access).
 #
 # A site that answers without a login is always taken down. When the site
 # cannot be reached, so Access is neither proven nor disproven, <remove> takes
@@ -21,6 +22,12 @@ worker=${3:-}
 
 if [ "$on_unreachable" != remove ] && [ "$on_unreachable" != keep ]; then
   echo "::error::on-unreachable must be \"remove\" or \"keep\", not \"$on_unreachable\"."
+  exit 1
+fi
+
+# Before any check, so that a typo takes nothing down.
+if [ -n "${ACCESS_TEAM:-}" ] && ! [[ "$ACCESS_TEAM" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+  echo "::error::\"$ACCESS_TEAM\" is not an Access team name."
   exit 1
 fi
 

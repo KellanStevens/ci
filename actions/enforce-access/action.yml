@@ -12,6 +12,13 @@ inputs:
   cloudflare-api-token:
     description: A token with Workers Scripts Edit (and Zone Read without account-id).
     required: true
+  access-team:
+    description: >-
+      The team name of your Access login, the "myteam" of
+      myteam.cloudflareaccess.com. With it, only a redirect to that team counts
+      as Access. Without it, a redirect to any team does, which a preview
+      Worker can fake. Set it.
+    default: ""
   worker-name:
     description: >-
       The preview Worker to delete with its domain, for example example-pr-12.
@@ -36,6 +43,7 @@ runs:
       shell: bash
       env:
         HOST: ${{ inputs.host }}
+        ACCESS_TEAM: ${{ inputs.access-team }}
         WORKER_NAME: ${{ inputs.worker-name }}
         ON_UNREACHABLE: ${{ inputs.on-unreachable }}
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
