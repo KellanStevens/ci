@@ -104,3 +104,22 @@ jobs:
             echo "::error::worker-secrets accepted CLOUDFLARE_API_TOKEN as a source."
             exit 1
           fi
+
+      # Fails before any request, so it needs no network.
+      - name: Check Access with a bad team name
+        id: bad-team
+        continue-on-error: true
+        uses: ./actions/check-access
+        with:
+          host: example.invalid
+          access-team: Not_A_Team
+
+      - name: Check the team name was refused
+        env:
+          OUTCOME: ${{ steps.bad-team.outcome }}
+          PUBLIC: ${{ steps.bad-team.outputs.public }}
+        run: |
+          if [ "$OUTCOME" != failure ] || [ -n "$PUBLIC" ]; then
+            echo "::error::check-access accepted a bad team name."
+            exit 1
+          fi

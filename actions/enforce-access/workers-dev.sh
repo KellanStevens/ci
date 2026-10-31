@@ -29,7 +29,7 @@ api="$cf_api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$worker/subdomain"
 
 response=$(mktemp)
 trap 'rm -f "$response"' EXIT
-code=$(curl -sS -o "$response" -w '%{http_code}' -H "$cf_auth" "$api")
+code=$(cf_curl -o "$response" -w '%{http_code}' "$api")
 if [ "$code" != 200 ]; then
   echo "::error::Could not read the workers.dev settings of the Worker $worker (HTTP $code). Is it deployed, and does the token have Workers Scripts Read?"
   jq -r '.errors[]? | "\(.code): \(.message)"' "$response" 2>/dev/null || cat "$response"
@@ -42,7 +42,7 @@ if [ "$state" = '{"enabled":false,"previews_enabled":false}' ]; then
   exit 0
 fi
 
-curl -fsS -X POST -H "$cf_auth" -H "Content-Type: application/json" \
+cf_curl -f -X POST -H "Content-Type: application/json" \
   --data '{"enabled":false,"previews_enabled":false}' "$api" >/dev/null
 echo "::error::$worker was public on workers.dev or its preview URLs ($state), past Access. Turned them off. Set \"workers_dev\": false and \"preview_urls\": false in wrangler.jsonc, also in the Wrangler environment, so that the next deploy does not turn them on again."
 exit 1
