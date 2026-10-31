@@ -17,8 +17,11 @@ cf_find_account() {
     # pr-1.example.co.za, that is pr-1.example.co.za, example.co.za, co.za.
     name=$host
     while [[ "$name" == *.* ]]; do
+      # A token without Zone Read gets a 403, which fails curl. Do not let that
+      # stop the script here: curl has printed the error, and the message below
+      # says what to do about it.
       CLOUDFLARE_ACCOUNT_ID=$(curl -fsS -H "$cf_auth" --get --data-urlencode "name=$name" "$cf_api/zones" |
-        jq -r '.result[0].account.id // empty')
+        jq -r '.result[0].account.id // empty') || CLOUDFLARE_ACCOUNT_ID=
       [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && break
       name=${name#*.}
     done
