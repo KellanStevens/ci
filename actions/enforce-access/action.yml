@@ -3,7 +3,8 @@ description: >-
   Fail unless Cloudflare Access protects a hostname, and take the site down
   if it does not. A site that answers without a login is detached. For a site
   that cannot be reached, on-unreachable decides. With worker-name, the whole
-  preview Worker is deleted.
+  preview Worker is deleted. With workers-dev-worker, the workers.dev and
+  preview URLs of the Worker, which skip Access, are turned off.
 
 inputs:
   host:
@@ -16,6 +17,15 @@ inputs:
     description: >-
       The preview Worker to delete with its domain, for example example-pr-12.
       Leave empty to detach the domain only, as for production.
+    default: ""
+  workers-dev-worker:
+    description: >-
+      The Worker whose workers.dev and preview URLs must be off, for example
+      example-pr-12 or the name in wrangler.jsonc. Access protects the
+      hostname, not these URLs, so a Worker that is on them is public. They
+      are turned off and the step fails, until wrangler.jsonc sets
+      "workers_dev" and "preview_urls" to false. Leave empty to skip the check,
+      with a warning. Needs Workers Scripts Edit.
     default: ""
   on-unreachable:
     description: >-
@@ -37,7 +47,8 @@ runs:
       env:
         HOST: ${{ inputs.host }}
         WORKER_NAME: ${{ inputs.worker-name }}
+        WORKERS_DEV_WORKER: ${{ inputs.workers-dev-worker }}
         ON_UNREACHABLE: ${{ inputs.on-unreachable }}
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
-      run: '"$GITHUB_ACTION_PATH/enforce-access.sh" "$HOST" "$ON_UNREACHABLE" "$WORKER_NAME"'
+      run: '"$GITHUB_ACTION_PATH/enforce-access.sh" "$HOST" "$ON_UNREACHABLE" "$WORKER_NAME" "$WORKERS_DEV_WORKER"'

@@ -43,6 +43,15 @@ on:
           public, remove its domain and fail.
         type: boolean
         default: false
+      worker-name:
+        description: >-
+          The production Worker, as "name" in wrangler.jsonc. With
+          require-access, its workers.dev and preview URLs must be off, because
+          Access does not protect them: they are turned off and the job fails
+          until wrangler.jsonc sets "workers_dev" and "preview_urls" to false.
+          Empty skips that check, with a warning.
+        type: string
+        default: ""
       account-id:
         description: >-
           The Cloudflare account, to remove the domain. Leave empty to find
@@ -175,5 +184,6 @@ jobs:
         with:
           host: ${{ steps.host.outputs.host }}
           on-unreachable: keep
+          workers-dev-worker: ${{ inputs.worker-name }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}
