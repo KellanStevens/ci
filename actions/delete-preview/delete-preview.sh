@@ -34,7 +34,8 @@ done
 # force=true deletes the Worker even if another Worker binds to it, as
 # `wrangler delete --force` did.
 response=$(mktemp)
-code=$(curl -sS -o "$response" -w '%{http_code}' -X DELETE -H "$cf_auth" \
+trap 'rm -f "$response"' EXIT
+code=$(cf_curl -o "$response" -w '%{http_code}' -X DELETE \
   "$cf_api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$name?force=true")
 if [ "$code" = 200 ]; then
   echo "Deleted the Worker $name."

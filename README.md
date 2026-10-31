@@ -29,6 +29,15 @@ reusable workflow checks out this repository at its own commit
 (`job.workflow_sha`) to run the actions, so a workflow and the actions it uses
 always come from the same commit.
 
+## Wrangler
+
+A site must list `wrangler` in its `package.json`, so that `bun.lock` pins it.
+`check.yml`, `deploy.yml` and `preview.yml` run `bunx --no-install wrangler`,
+which uses only the installed copy and fails if there is none. Without
+`--no-install`, `bunx` would download the latest Wrangler from the registry
+into a step that holds the Cloudflare token. Renovate then updates Wrangler
+like any other dependency.
+
 ## Secrets
 
 This repository holds no secrets. A caller passes each secret by name, which
@@ -81,7 +90,7 @@ name can read another secret or a variable, as `NAME=SOURCE`.
     optional: RESEND_API_KEY
     secrets: ${{ toJSON(secrets) }}
     vars: ${{ toJSON(vars) }}
-- run: bunx wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
+- run: bunx --no-install wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
 ```
 
 The file is JSON, so a value can hold any character. `file` is empty when
@@ -134,12 +143,19 @@ and production alike.
 - With `worker-name`, it deletes the preview Worker and its domain, like
   `delete-preview`. Without it, it detaches the domain only, like
   `remove-domain`.
+- Access protects the hostname, not the `workers.dev` and preview URLs of the
+  same Worker. With `workers-dev-worker`, it turns both off and fails the step
+  if either was on. Set `"workers_dev": false` and `"preview_urls": false` in
+  `wrangler.jsonc` (also in each Wrangler environment), or the next deploy
+  turns them on again. Without it, the step warns that they were not checked.
+  It needs Workers Scripts Edit on the token.
 
 ```yaml
 - uses: KellanStevens/ci/actions/enforce-access@<sha> # v1.0.0
   with:
     host: pr-12.example.com
     worker-name: example-pr-12 # leave out for production
+    workers-dev-worker: example-pr-12 # the Worker to keep off workers.dev
     on-unreachable: remove # or keep
     access-team: myteam
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -201,8 +217,10 @@ check:
 Deploy the `site` artifact to production, in the `production` environment.
 Never cancelled once it starts. With `require-access: true`, it checks that
 Cloudflare Access protects the site, and removes the domain if not. If it
-cannot reach the site to check, the site stays up and the job fails. Pass
-`access-team` too (see `check-access`).
+cannot reach the site to check, the site stays up and the job fails.
+With `worker-name` (the `name` in `wrangler.jsonc`), it also turns off the
+`workers.dev` and preview URLs of the Worker, which skip Access, and fails the
+job if either was on. Pass `access-team` too (see `check-access`).
 
 A `guard` job runs first and fails unless the run is a push to the default
 branch, or a run by hand (`workflow_dispatch`) from it. A pull request that
@@ -233,8 +251,9 @@ starts, then with the link, or that it failed. Call it from a workflow that
 runs on `workflow_run` of CI, so that it runs from main with the secrets, and
 the code of the pull request never runs where the secrets are. See the comment
 at the top of the file. With `require-access: true`, it deletes a preview that
-Access does not protect, or that it cannot check. Pass `access-team` too (see
-`check-access`).
+Access does not protect, or that it cannot check, and turns off the
+`workers.dev` and preview URLs of the preview Worker, which skip Access. Pass
+`access-team` too (see `check-access`).
 
 With `paths`, a pull request gets a preview only if it changes a file under
 one of the paths, so a pull request that edits only the README, `CLAUDE.md` or
@@ -336,10 +355,20 @@ Add the rules that only one site needs to that site's `renovate.json`.
 
 Run the **Release** workflow from the Actions tab, on main, with the new
 version as `vX.Y.Z`. It tags the commit and drafts a GitHub Release with
-generated notes. Edit the notes, with breaking changes and known issues at the
-top, and publish the draft.
+generated notes. It stops if the `lint` and `actions` checks have not passed on
+that commit. Edit the notes, with breaking changes and known issues at the top,
+and publish the draft.
 
 Renovate opens a pull request in each site that moves its pins to the new tag
 as soon as the tag exists, before the draft is published. The
 `protect-release-tags` ruleset stops a `v*` tag from moving or being deleted,
 so fix a bad release with the next version.
+
+## Repository settings
+
+The rulesets are kept in `.github/rulesets/` as the record of what the
+repository enforces: `protect-main` stops main from being deleted or
+force-pushed and requires a pull request, and `protect-release-tags` stops a
+`v*` tag from being moved or deleted. GitHub does not read these files. After
+a change, import it under **Settings → Rules → Rulesets** (**New ruleset →
+Import a ruleset**), or update the ruleset through the API.

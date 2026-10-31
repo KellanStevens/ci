@@ -52,6 +52,15 @@ on:
           which a Worker of the site could fake. Set it with require-access.
         type: string
         default: ""
+      worker-name:
+        description: >-
+          The production Worker, as "name" in wrangler.jsonc. With
+          require-access, its workers.dev and preview URLs must be off, because
+          Access does not protect them: they are turned off and the job fails
+          until wrangler.jsonc sets "workers_dev" and "preview_urls" to false.
+          Empty skips that check, with a warning.
+        type: string
+        default: ""
       account-id:
         description: >-
           The Cloudflare account, to remove the domain. Leave empty to find
@@ -162,7 +171,9 @@ jobs:
           if [ -n "$SECRETS_FILE" ]; then
             args+=(--secrets-file "$SECRETS_FILE")
           fi
-          bunx wrangler deploy "${args[@]}"
+          # --no-install: this step holds the Cloudflare token, so run only the
+          # Wrangler that bun.lock pins, never the latest one from the registry.
+          bunx --no-install wrangler deploy "${args[@]}"
 
       - name: Find host
         if: ${{ inputs.require-access }}
@@ -185,5 +196,6 @@ jobs:
           host: ${{ steps.host.outputs.host }}
           on-unreachable: keep
           access-team: ${{ inputs.access-team }}
+          workers-dev-worker: ${{ inputs.worker-name }}
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           account-id: ${{ inputs.account-id }}

@@ -20,12 +20,12 @@ fi
 cf_find_account "$host"
 
 api="$cf_api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains"
-ids=$(curl -fsS -H "$cf_auth" --get --data-urlencode "hostname=$host" "$api" | jq -r '.result[].id')
+ids=$(cf_curl -f --get --data-urlencode "hostname=$host" "$api" | jq -r '.result[].id')
 if [ -z "$ids" ]; then
   echo "No custom domain for $host."
   exit 0
 fi
 for id in $ids; do
-  curl -fsS -X DELETE -H "$cf_auth" "$api/$id" >/dev/null
+  cf_curl -f -X DELETE "$api/$id" >/dev/null
   echo "Removed $host ($id)."
 done

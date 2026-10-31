@@ -3,7 +3,18 @@
 # it, do not run it. Needs CLOUDFLARE_API_TOKEN.
 
 cf_api=https://api.cloudflare.com/client/v4
-cf_auth="Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+# cf_curl <curl argument>...
+#
+# curl for the Cloudflare API: quiet, with a timeout, and a retry after a
+# timeout or a 408, 429 or 5xx answer, so that a hung or flaky call neither
+# blocks the job nor fails a cleanup. Add -f to fail on an HTTP error. The
+# token goes in a config on stdin, not in the arguments, because any process on
+# the runner can read the arguments of another.
+cf_curl() {
+  curl --silent --show-error --max-time 30 --retry 3 -K - "$@" \
+    <<<"header = \"Authorization: Bearer $CLOUDFLARE_API_TOKEN\""
+}
 
 # cf_find_account <hostname>
 #
@@ -17,8 +28,11 @@ cf_find_account() {
     # pr-1.example.co.za, that is pr-1.example.co.za, example.co.za, co.za.
     name=$host
     while [[ "$name" == *.* ]]; do
-      CLOUDFLARE_ACCOUNT_ID=$(curl -fsS -H "$cf_auth" --get --data-urlencode "name=$name" "$cf_api/zones" |
-        jq -r '.result[0].account.id // empty')
+      # A token without Zone Read gets a 403, which fails curl. Do not let that
+      # stop the script here: curl has printed the error, and the message below
+      # says what to do about it.
+      CLOUDFLARE_ACCOUNT_ID=$(cf_curl -f --get --data-urlencode "name=$name" "$cf_api/zones" |
+        jq -r '.result[0].account.id // empty') || CLOUDFLARE_ACCOUNT_ID=
       [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && break
       name=${name#*.}
     done
