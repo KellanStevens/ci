@@ -29,6 +29,15 @@ reusable workflow checks out this repository at its own commit
 (`job.workflow_sha`) to run the actions, so a workflow and the actions it uses
 always come from the same commit.
 
+## Wrangler
+
+A site must list `wrangler` in its `package.json`, so that `bun.lock` pins it.
+`check.yml`, `deploy.yml` and `preview.yml` run `bunx --no-install wrangler`,
+which uses only the installed copy and fails if there is none. Without
+`--no-install`, `bunx` would download the latest Wrangler from the registry
+into a step that holds the Cloudflare token. Renovate then updates Wrangler
+like any other dependency.
+
 ## Secrets
 
 This repository holds no secrets. A caller passes each secret by name, which
@@ -81,7 +90,7 @@ name can read another secret or a variable, as `NAME=SOURCE`.
     optional: RESEND_API_KEY
     secrets: ${{ toJSON(secrets) }}
     vars: ${{ toJSON(vars) }}
-- run: bunx wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
+- run: bunx --no-install wrangler deploy --secrets-file "${{ steps.secrets.outputs.file }}"
 ```
 
 The file is JSON, so a value can hold any character. `file` is empty when

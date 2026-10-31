@@ -370,7 +370,9 @@ jobs:
           if [ -n "$SECRETS_FILE" ]; then
             args+=(--secrets-file "$SECRETS_FILE")
           fi
-          bunx wrangler deploy "${args[@]}"
+          # --no-install: this step holds the Cloudflare token, so run only the
+          # Wrangler that bun.lock pins, never the latest one from the registry.
+          bunx --no-install wrangler deploy "${args[@]}"
           echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
           echo "Preview: https://$PREVIEW_HOST" >> "$GITHUB_STEP_SUMMARY"
 
