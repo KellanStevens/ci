@@ -322,10 +322,20 @@ Add the rules that only one site needs to that site's `renovate.json`.
 
 Run the **Release** workflow from the Actions tab, on main, with the new
 version as `vX.Y.Z`. It tags the commit and drafts a GitHub Release with
-generated notes. Edit the notes, with breaking changes and known issues at the
-top, and publish the draft.
+generated notes. It stops if the `lint` and `actions` checks have not passed on
+that commit. Edit the notes, with breaking changes and known issues at the top,
+and publish the draft.
 
 Renovate opens a pull request in each site that moves its pins to the new tag
 as soon as the tag exists, before the draft is published. The
 `protect-release-tags` ruleset stops a `v*` tag from moving or being deleted,
 so fix a bad release with the next version.
+
+## Repository settings
+
+The rulesets are kept in `.github/rulesets/` as the record of what the
+repository enforces: `protect-main` stops main from being deleted or
+force-pushed and requires a pull request, and `protect-release-tags` stops a
+`v*` tag from being moved or deleted. GitHub does not read these files. After
+a change, import it under **Settings → Rules → Rulesets** (**New ruleset →
+Import a ruleset**), or update the ruleset through the API.
