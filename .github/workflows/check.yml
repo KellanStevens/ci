@@ -75,38 +75,15 @@ jobs:
       - name: Check
         env:
           SCRIPTS: ${{ inputs.scripts }}
-        run: |
-          set -f
-          failed=()
-          for script in $SCRIPTS; do
-            if ! [[ "$script" =~ ^[A-Za-z0-9:_-]+$ ]]; then
-              echo "::error::\"$script\" is not a script name."
-              exit 1
-            fi
-            echo "::group::bun run $script"
-            status=0
-            bun run "$script" || status=$?
-            echo "::endgroup::"
-            if [ "$status" -ne 0 ]; then
-              echo "::error::bun run $script failed."
-              failed+=("$script")
-            fi
-          done
-          if [ "${#failed[@]}" -ne 0 ]; then
-            echo "Failed: ${failed[*]}"
-            exit 1
-          fi
+        run: .ci/scripts/run-checks.sh
 
       # The bundle runs only on Cloudflare. preview.yml deploys it with the
       # wrangler.jsonc of main, not of the pull request.
-      #
-      # --no-install: run only the Wrangler that bun.lock pins, never the latest
-      # one from the registry.
       - name: Bundle preview Worker
         if: ${{ inputs.worker-bundle && github.event_name == 'pull_request' && env.UPLOAD == 'true' }}
         env:
           PREVIEW_ENV: ${{ inputs.preview-env }}
-        run: bunx --no-install wrangler deploy --dry-run --env "$PREVIEW_ENV" --outdir "$RUNNER_TEMP/worker"
+        run: .ci/scripts/bundle-preview-worker.sh
 
       - name: Upload site
         if: ${{ env.UPLOAD == 'true' }}

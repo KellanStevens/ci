@@ -146,12 +146,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # Check out the scripts of this repository.
+      contents: read
       pull-requests: read
     outputs:
       number: ${{ steps.find.outputs.number }}
       host: ${{ steps.find.outputs.host }}
       worker: ${{ steps.find.outputs.worker }}
     steps:
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
       - name: Find pull request
         id: find
         env:
@@ -163,61 +173,7 @@ jobs:
           NAME: ${{ inputs.name }}
           HOST: ${{ inputs.host }}
           PATHS: ${{ inputs.paths }}
-        run: |
-          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::\"$HEAD_SHA\" is not a commit SHA."
-            exit 1
-          fi
-          # Skip a draft, and skip a run of an older commit. The run of the
-          # newest commit deploys that one.
-          number=$(gh api --method GET "repos/$REPO/pulls" -f state=open -f head="$OWNER:$BRANCH" \
-            --jq "[.[] | select(.head.sha == \"$HEAD_SHA\" and (.draft | not))][0].number // empty")
-          if [ -z "$number" ]; then
-            echo "::notice::No open pull request that is ready for review is at $HEAD_SHA. Nothing to deploy."
-            echo "number=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Skip a pull request that changes none of the paths, for example
-          # one that edits only the README or the workflows. The file list
-          # comes from the API, not from the files of the run.
-          if [ -n "${PATHS//[[:space:]]/}" ]; then
-            matched=false
-            files=$(gh api --paginate "repos/$REPO/pulls/$number/files" --jq '.[] | .filename, (.previous_filename // empty)')
-            while IFS= read -r file && [ "$matched" = false ]; do
-              while IFS= read -r path; do
-                path=${path//[[:space:]]/}
-                path=${path#./}
-                [ -n "$path" ] || continue
-                # shellcheck disable=SC2053
-                if [[ "$file" == "$path" || "$file" == "${path%/}/"* || "$file" == $path ]]; then
-                  matched=true
-                  break
-                fi
-              done <<< "$PATHS"
-            done <<< "$files"
-            if [ "$matched" = false ]; then
-              echo "::notice::Pull request #$number changes none of the preview paths. Nothing to deploy."
-              echo "number=" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-
-          host=${HOST//\{pr\}/$number}
-          worker="$NAME-pr-$number"
-          if ! [[ "$host" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ && "$HOST" == *"{pr}"* ]]; then
-            echo "::error::\"$HOST\" is not a hostname with {pr} in it."
-            exit 1
-          fi
-          if ! [[ "$worker" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
-            echo "::error::\"$NAME\" is not a Worker name."
-            exit 1
-          fi
-          {
-            echo "number=$number"
-            echo "host=$host"
-            echo "worker=$worker"
-          } >> "$GITHUB_OUTPUT"
+        run: .ci/scripts/find-preview-pr.sh
 
   preview:
     name: preview
@@ -304,27 +260,7 @@ jobs:
           WORKER_SRC: ${{ runner.temp }}/worker
           SITE_PATH: ${{ inputs.site-path }}
           WORKER: ${{ inputs.worker }}
-        run: |
-          if [ -z "$(ls -A "$SRC")" ]; then
-            echo "::error::The site is empty."
-            exit 1
-          fi
-          find "$SRC" -mindepth 1 ! -type f ! -type d -delete
-          find "$SRC" -mindepth 1 -name '.*' \
-            ! -path "$SRC/.well-known" ! -path "$SRC/.assetsignore" -prune -exec rm -rf {} +
-          rm -rf "$SITE_PATH"
-          cp -R "$SRC" "$SITE_PATH"
-
-          # Wrangler uploads the bundle as it is, with --no-bundle. Keep only
-          # JavaScript and source maps.
-          if [ "$WORKER" = true ]; then
-            if [ ! -f "$WORKER_SRC/index.js" ]; then
-              echo "::error::The Worker bundle has no index.js."
-              exit 1
-            fi
-            find "$WORKER_SRC" -mindepth 1 \( ! -type f ! -type d \) -delete
-            find "$WORKER_SRC" -type f ! -name '*.js' ! -name '*.mjs' ! -name '*.map' -print -delete
-          fi
+        run: .ci/scripts/prepare-preview-site.sh
 
       # The build is shared with production, which may allow search engines.
       # Previews are public, so add the noindex rule to this copy only.
@@ -332,8 +268,7 @@ jobs:
         if: ${{ inputs.noindex }}
         env:
           SITE_PATH: ${{ inputs.site-path }}
-        run: |
-          printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> "$SITE_PATH/_headers"
+        run: .ci/scripts/add-noindex.sh
 
       - name: Write Worker secrets
         id: secrets
@@ -355,36 +290,7 @@ jobs:
           SECRETS_FILE: ${{ steps.secrets.outputs.file }}
           WORKER: ${{ inputs.worker }}
           WORKER_SRC: ${{ runner.temp }}/worker
-        run: |
-          args=()
-          if [ "$WORKER" = true ]; then
-            # Given a script, Wrangler looks for its config next to the
-            # script, so name the config of main.
-            config=
-            for f in wrangler.jsonc wrangler.json wrangler.toml; do
-              if [ -f "$f" ]; then config=$f; break; fi
-            done
-            if [ -z "$config" ]; then
-              echo "::error::No Wrangler config in the repository root."
-              exit 1
-            fi
-            args+=("$WORKER_SRC/index.js" --no-bundle --config "$config")
-          fi
-          args+=(
-            --env "$WRANGLER_ENV"
-            --name "$WORKER_NAME"
-            --domain "$PREVIEW_HOST"
-            --tag "$HEAD_SHA"
-            --message "PR #$PR_NUMBER @ ${HEAD_SHA::7}"
-          )
-          if [ -n "$SECRETS_FILE" ]; then
-            args+=(--secrets-file "$SECRETS_FILE")
-          fi
-          # --no-install: this step holds the Cloudflare token, so run only the
-          # Wrangler that bun.lock pins, never the latest one from the registry.
-          bunx --no-install wrangler deploy "${args[@]}"
-          echo "url=https://$PREVIEW_HOST" >> "$GITHUB_OUTPUT"
-          echo "Preview: https://$PREVIEW_HOST" >> "$GITHUB_STEP_SUMMARY"
+        run: .ci/scripts/deploy-preview.sh
 
       # A preview that Access does not protect must not stay up, also if the
       # check cannot reach it. Deleting a preview costs nothing: the next push
@@ -426,14 +332,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          state=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .state)
-          echo "state=$state" >> "$GITHUB_OUTPUT"
-          if [ "$state" = "open" ]; then
-            echo "The pull request is open. Keeping the preview."
-          else
-            echo "::notice::The pull request closed during the deploy. Deleting the preview."
-          fi
+        run: .ci/scripts/pr-state.sh
 
       - name: Delete preview if closed
         if: ${{ always() && steps.state.outputs.state == 'closed' }}

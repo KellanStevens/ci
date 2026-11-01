@@ -11,6 +11,14 @@
       ],
       "depNameTemplate": "rhysd/actionlint",
       "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
+      "description": "Bats in lint.yml: the version from npm",
+      "managerFilePatterns": ["/^\\.github/workflows/lint\\.yml$/"],
+      "matchStrings": ["BATS_VERSION: (?<currentValue>\\S+)"],
+      "depNameTemplate": "bats",
+      "datasourceTemplate": "npm"
     }
   ]
 }

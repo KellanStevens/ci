@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Stand-in for curl in the tests. It never touches the network: it answers from
+# the routes that a test adds with route_curl (see helpers.bash).
+#
+# Logs "METHOD URL" to $STUB_DIR/curl.log, the arguments to curl.argv, the
+# --data bodies to curl.data and the config that -K - reads to curl.config.
+set -u
+: "${STUB_DIR:?curl stub: STUB_DIR is not set}"
+
+method=GET
+url=''
+out=''
+fmt=''
+fail=0
+get=0
+data=''
+query=()
+args=("$@")
+i=0
+while [ "$i" -lt "$#" ]; do
+  a=${args[$i]}
+  case $a in
+    -X) i=$((i + 1)); method=${args[$i]} ;;
+    -o) i=$((i + 1)); out=${args[$i]} ;;
+    -w) i=$((i + 1)); fmt=${args[$i]} ;;
+    -K) i=$((i + 1)); cat >> "$STUB_DIR/curl.config" ;;
+    -H | --max-time | --retry | --connect-timeout) i=$((i + 1)) ;;
+    --data | -d) i=$((i + 1)); data=${args[$i]} ;;
+    --data-urlencode) i=$((i + 1)); query+=("${args[$i]}") ;;
+    --get | -G) get=1 ;;
+    --fail) fail=1 ;;
+    --*) ;;
+    -?*) [[ $a == *f* ]] && fail=1 ;;
+    *) url=$a ;;
+  esac
+  i=$((i + 1))
+done
+
+if [ "$get" -eq 1 ] && [ "${#query[@]}" -gt 0 ]; then
+  joined=$(IFS='&'; echo "${query[*]}")
+  url="$url?$joined"
+fi
+
+echo "$method $url" >> "$STUB_DIR/curl.log"
+echo "$*" >> "$STUB_DIR/curl.argv"
+if [ -n "$data" ]; then echo "$data" >> "$STUB_DIR/curl.data"; fi
+
+routes=$STUB_DIR/curl.routes
+n=0 first=0 matches=0
+if [ -f "$routes" ]; then
+  while IFS=$'\t' read -r r_method r_pattern r_code r_body r_redirect; do
+    n=$((n + 1))
+    if { [ "$r_method" = '*' ] || [ "$r_method" = "$method" ]; } && [[ $url == *"$r_pattern"* ]]; then
+      matches=$((matches + 1))
+      if [ "$first" -eq 0 ]; then
+        first=$n code=$r_code body=$r_body redirect=${r_redirect:-}
+      fi
+    fi
+  done < "$routes"
+fi
+if [ "$first" -eq 0 ]; then
+  echo "curl stub: no route for $method $url" >&2
+  exit 99
+fi
+# Several routes match: use the first once, then the next. The last one stays.
+if [ "$matches" -gt 1 ]; then sed -i "${first}d" "$routes"; fi
+
+# -w is written after the body, as curl does.
+write_out() {
+  [ -n "$fmt" ] || return 0
+  local text=${fmt//%\{http_code\}/$code}
+  text=${text//%\{redirect_url\}/${redirect:-}}
+  printf '%s' "$text"
+}
+
+if [ "$code" = 000 ]; then
+  write_out
+  echo "curl: (7) Failed to connect to $url" >&2
+  exit 7
+fi
+if [ "$fail" -eq 1 ] && [ "$code" -ge 400 ]; then
+  echo "curl: (22) The requested URL returned error: $code" >&2
+  exit 22
+fi
+if [ -n "$out" ]; then
+  cat "$body" > "$out"
+else
+  cat "$body"
+fi
+write_out
+exit 0

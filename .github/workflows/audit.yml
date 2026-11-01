@@ -35,6 +35,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # The scripts of this repository, at the commit of this workflow.
+      - name: Check out shared CI
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+
       - name: Install Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -43,14 +52,4 @@ jobs:
       - name: Audit
         env:
           IGNORE: ${{ inputs.ignore }}
-        run: |
-          set -f
-          args=()
-          for id in $IGNORE; do
-            if ! [[ "$id" =~ ^(GHSA(-[23456789cfghjmpqrvwx]{4}){3}|CVE-[0-9]{4}-[0-9]+)$ ]]; then
-              echo "::error::\"$id\" is not an advisory ID."
-              exit 1
-            fi
-            args+=("--ignore=$id")
-          done
-          bun audit "${args[@]}"
+        run: .ci/scripts/audit.sh
