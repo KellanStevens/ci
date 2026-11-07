@@ -123,3 +123,9 @@ jobs:
             echo "::error::check-access accepted a bad team name."
             exit 1
           fi
+
+  # The shared static analysis, run on this repository as a site would call
+  # it. This also tests the workflow before a release. Not part of the
+  # release gate: a new Semgrep rule can turn it red without a change here.
+  static-analysis:
+    uses: ./.github/workflows/static-analysis.yml
