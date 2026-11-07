@@ -197,6 +197,31 @@ audit:
     ignore: GHSA-gcqx-w48m-w2h4
 ```
 
+### `static-analysis.yml`
+
+Scan the code and the workflows of a site for security bugs with
+[Semgrep](https://semgrep.dev), which is open source and free. CodeQL would
+need GitHub Advanced Security, which a private repository pays for. The job
+fails when Semgrep reports a finding. The rules come from the Semgrep registry
+each time, so a new rule can turn the job red without a change to the site: do
+not make a deploy wait for it.
+
+`config` lists the rule sets (the default is `p/default`, `p/typescript`,
+`p/javascript`, `p/security-audit` and `p/github-actions`), `exclude` the paths
+that are data and not code, and `severity` the levels that fail the job (the
+default is `WARNING ERROR`, because `INFO` is mostly false alarms). A finding
+that is a false alarm gets a `// nosemgrep: <rule-id>` comment on the line
+before it, with the reason. Renovate updates the Semgrep version.
+
+```yaml
+static-analysis:
+  uses: KellanStevens/ci/.github/workflows/static-analysis.yml@<sha> # v1.0.0
+  with:
+    exclude: |
+      src/content
+      docs
+```
+
 ### `check.yml`
 
 Run the package scripts of a site in one job, then upload the build as the

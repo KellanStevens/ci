@@ -1,0 +1,106 @@
+name: Static analysis
+
+# Scan the code and the workflows of a site for security bugs with Semgrep
+# (open source, free). CodeQL needs GitHub Advanced Security, which a private
+# repository pays for, so a site cannot use it at no cost.
+#
+# The rules come from the Semgrep registry when the job runs. A new rule can
+# turn this job red without any change to the code, so do not make a deploy
+# wait for it.
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: >-
+          Semgrep rule sets (p/<name>) or rule files in the repository,
+          separated by spaces or new lines.
+        type: string
+        default: |
+          p/default
+          p/typescript
+          p/javascript
+          p/security-audit
+          p/github-actions
+      exclude:
+        description: >-
+          Paths to skip, separated by spaces or new lines, for example
+          src/content for files that are data and not code.
+        type: string
+        default: ""
+      severity:
+        description: >-
+          The levels that fail the job, separated by spaces: INFO, WARNING
+          and ERROR. INFO is Semgrep's low-confidence hints, mostly false
+          alarms.
+        type: string
+        default: WARNING ERROR
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  static-analysis:
+    name: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Renovate updates VERSION (customManagers in renovate.json).
+      - name: Install Semgrep
+        env:
+          # renovate: datasource=pypi depName=semgrep
+          VERSION: 1.183.0
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep"
+          "$RUNNER_TEMP/semgrep/bin/pip" install --quiet "semgrep==$VERSION"
+
+      # Inputs reach the shell as environment variables, never in the script,
+      # and each word is checked before it becomes an argument.
+      - name: Scan
+        env:
+          CONFIG: ${{ inputs.config }}
+          EXCLUDE: ${{ inputs.exclude }}
+          SEVERITY: ${{ inputs.severity }}
+        run: |
+          set -f
+          args=()
+          for item in $CONFIG; do
+            if ! [[ "$item" =~ ^(p/[a-z0-9._-]+|[A-Za-z0-9_][A-Za-z0-9_./-]*)$ ]]; then
+              echo "::error::\"$item\" is not a rule set or a rule file."
+              exit 1
+            fi
+            args+=(--config "$item")
+          done
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "::error::Name at least one rule set in config."
+            exit 1
+          fi
+          for item in $EXCLUDE; do
+            if ! [[ "$item" =~ ^[A-Za-z0-9_][A-Za-z0-9_./*-]*$ ]]; then
+              echo "::error::\"$item\" is not a path."
+              exit 1
+            fi
+            args+=(--exclude "$item")
+          done
+          for item in $SEVERITY; do
+            if ! [[ "$item" =~ ^(INFO|WARNING|ERROR)$ ]]; then
+              echo "::error::\"$item\" is not INFO, WARNING or ERROR."
+              exit 1
+            fi
+            args+=(--severity "$item")
+          done
+          "$RUNNER_TEMP/semgrep/bin/semgrep" scan \
+            --metrics=off \
+            --disable-version-check \
+            --error \
+            "${args[@]}" \
+            .
