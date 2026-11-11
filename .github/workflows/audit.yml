@@ -16,6 +16,13 @@ on:
           say why next to the caller.
         type: string
         default: ""
+      runs-on:
+        description: >-
+          The runner label of the job, for example
+          blacksmith-4vcpu-ubuntu-2404. It must be a Linux runner that the
+          calling repository can use.
+        type: string
+        default: ubuntu-latest
 
 permissions:
   contents: read
@@ -27,7 +34,7 @@ defaults:
 jobs:
   audit:
     name: audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 5
     steps:
       - name: Check out
