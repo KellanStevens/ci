@@ -47,6 +47,13 @@ on:
           The Cloudflare account. Leave empty to find it from the zone.
         type: string
         default: ""
+      runs-on:
+        description: >-
+          The runner label of the job, for example
+          blacksmith-4vcpu-ubuntu-2404. It must be a Linux runner that the
+          calling repository can use.
+        type: string
+        default: ubuntu-latest
     secrets:
       CLOUDFLARE_API_TOKEN:
         required: true
@@ -63,7 +70,7 @@ defaults:
 jobs:
   cleanup:
     name: cleanup
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
     # The Cloudflare token of the previews.
     environment: preview

@@ -197,6 +197,9 @@ audit:
     ignore: GHSA-gcqx-w48m-w2h4
 ```
 
+The job runs on `ubuntu-latest`. To use another runner, set `runs-on` to its
+label, for example `runs-on: blacksmith-4vcpu-ubuntu-2404`.
+
 ### `check.yml`
 
 Run the package scripts of a site in one job, then upload the build as the
@@ -331,6 +334,9 @@ jobs:
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
+
+The job runs on `ubuntu-latest`. To use another runner, set `runs-on` to its
+label, as for `audit.yml`.
 
 ## Renovate
 
